@@ -2,7 +2,6 @@ package com.chaples55.wheelielauncher.ui.home
 
 import android.content.ComponentName
 import android.graphics.Bitmap
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -109,15 +108,6 @@ fun CircularDock(
             val isDraggingThis = appSlot != null && appSlot.item.componentName == draggingCn
             val x = if (isDraggingThis) dragX else homeX
             val y = if (isDraggingThis) dragY else homeY
-            val isSelected = placement.slotIndex == selectedIndex
-            val scale by animateFloatAsState(
-                targetValue = when {
-                    isDraggingThis -> 1.25f
-                    isSelected -> 1.22f
-                    else -> 1f
-                },
-                label = "dockScale",
-            )
             val offsetX = (x - iconPx / 2f).roundToInt()
             val offsetY = (y - iconPx / 2f).roundToInt()
 
@@ -125,8 +115,7 @@ fun CircularDock(
                 modifier = Modifier
                     .offset { IntOffset(offsetX, offsetY) }
                     .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
+                        alpha = if (isDraggingThis && dragMoved) 0.85f else 1f
                     }
                     .pointerInput(placement.slot, placement.slotIndex) {
                         detectTapGestures(

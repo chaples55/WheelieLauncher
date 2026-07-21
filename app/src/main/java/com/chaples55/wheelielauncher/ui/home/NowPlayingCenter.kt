@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,6 +42,7 @@ fun NowPlayingCenter(
     nowPlaying: NowPlayingState,
     artworkBitmap: Bitmap?,
     diameter: Dp,
+    onOpenApp: () -> Unit,
     onPlayPause: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -50,29 +52,32 @@ fun NowPlayingCenter(
         0f
     }
     val artKey = nowPlaying.artworkBitmapKey ?: nowPlaying.artworkUri?.toString() ?: "empty"
+    val imageBitmap = remember(artKey, artworkBitmap) { artworkBitmap?.asImageBitmap() }
 
     Box(
-        modifier = modifier.size(diameter),
+        modifier = modifier
+            .size(diameter)
+            .clip(CircleShape)
+            .clickable(onClick = onOpenApp),
         contentAlignment = Alignment.Center,
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(CircleShape)
                 .background(Color(0xFF1C1C22)),
         ) {
             AnimatedContent(
                 targetState = artKey,
                 transitionSpec = {
-                    fadeIn(androidx.compose.animation.core.tween(350)) togetherWith
-                        fadeOut(androidx.compose.animation.core.tween(350))
+                    fadeIn(androidx.compose.animation.core.tween(300)) togetherWith
+                        fadeOut(androidx.compose.animation.core.tween(300))
                 },
                 label = "centerArt",
             ) { key ->
                 when {
-                    artworkBitmap != null && key == artKey -> {
+                    imageBitmap != null && key == artKey -> {
                         Image(
-                            bitmap = artworkBitmap.asImageBitmap(),
+                            bitmap = imageBitmap,
                             contentDescription = nowPlaying.title,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize(),
@@ -82,6 +87,7 @@ fun NowPlayingCenter(
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
                                 .data(nowPlaying.artworkUri)
+                                .memoryCacheKey(artKey)
                                 .build(),
                             contentDescription = nowPlaying.title,
                             contentScale = ContentScale.Crop,
@@ -94,13 +100,11 @@ fun NowPlayingCenter(
                 }
             }
 
-            // Progress along bottom edge of album art
             Canvas(modifier = Modifier.fillMaxSize().padding(3.dp)) {
                 val stroke = 4.dp.toPx()
                 val diameterPx = size.minDimension
                 val topLeft = Offset((size.width - diameterPx) / 2f, (size.height - diameterPx) / 2f)
                 val arcSize = Size(diameterPx, diameterPx)
-                // Bottom arc baseline
                 drawArc(
                     color = Color.White.copy(alpha = 0.25f),
                     startAngle = 30f,

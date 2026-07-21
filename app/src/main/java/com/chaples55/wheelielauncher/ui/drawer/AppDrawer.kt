@@ -1,7 +1,7 @@
 package com.chaples55.wheelielauncher.ui.drawer
 
 import android.content.ComponentName
-import android.graphics.drawable.Drawable
+import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -55,8 +55,7 @@ import com.chaples55.wheelielauncher.R
 import com.chaples55.wheelielauncher.data.LauncherApp
 import com.chaples55.wheelielauncher.data.LauncherSettings
 import com.chaples55.wheelielauncher.data.key
-import com.chaples55.wheelielauncher.ui.components.AppIconImage
-import com.chaples55.wheelielauncher.ui.components.rememberResolvedIcon
+import com.chaples55.wheelielauncher.ui.components.CachedAppIcon
 import kotlin.math.roundToInt
 
 private const val DISMISS_DISTANCE_PX = 140f
@@ -65,7 +64,8 @@ private const val DISMISS_DISTANCE_PX = 140f
 fun AppDrawer(
     apps: List<LauncherApp>,
     settings: LauncherSettings,
-    resolveIcon: suspend (ComponentName, String?) -> Drawable?,
+    loadIconBitmap: suspend (ComponentName, String?, Int) -> Bitmap?,
+    peekIconBitmap: (ComponentName, String?, Int) -> Bitmap? = { _, _, _ -> null },
     onDismiss: () -> Unit,
     onOpenSettings: () -> Unit,
     onLaunch: (ComponentName) -> Unit,
@@ -198,9 +198,6 @@ fun AppDrawer(
             ) {
                 items(apps, key = { it.componentName.flattenToString() }) { app ->
                     val custom = settings.customizations[app.componentName.key()]
-                    val drawable = rememberResolvedIcon(app.componentName to custom?.customIcon) {
-                        resolveIcon(app.componentName, custom?.customIcon)
-                    }
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.pointerInput(app) {
@@ -210,10 +207,13 @@ fun AppDrawer(
                             )
                         },
                     ) {
-                        AppIconImage(
-                            drawable = drawable,
+                        CachedAppIcon(
+                            componentName = app.componentName,
+                            customIcon = custom?.customIcon,
                             contentDescription = app.label,
                             size = settings.drawerIconSizeDp.dp,
+                            loadBitmap = loadIconBitmap,
+                            peekBitmap = peekIconBitmap,
                         )
                         if (settings.drawerShowLabels) {
                             Text(

@@ -111,12 +111,6 @@ fun SettingsScreen(
                 value = settings.nowPlayingSizeDp,
                 range = 72f..220f,
             ) { onUpdate { repo -> repo.setNowPlayingSize(it) } }
-            SwitchRow("Volume keys select dock icons", settings.interceptVolumeAsWheel) {
-                onUpdate { repo -> repo.setInterceptVolume(it) }
-            }
-            SwitchRow("Play/pause key launches / toggles media", settings.interceptPlayPause) {
-                onUpdate { repo -> repo.setInterceptPlayPause(it) }
-            }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             SectionTitle("Drawer")

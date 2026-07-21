@@ -1,7 +1,7 @@
 package com.chaples55.wheelielauncher.ui.home
 
 import android.content.ComponentName
-import android.graphics.drawable.Drawable
+import android.graphics.Bitmap
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -40,8 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.chaples55.wheelielauncher.R
 import com.chaples55.wheelielauncher.data.DockItem
-import com.chaples55.wheelielauncher.ui.components.AppIconImage
-import com.chaples55.wheelielauncher.ui.components.rememberResolvedIcon
+import com.chaples55.wheelielauncher.ui.components.CachedAppIcon
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -63,7 +62,8 @@ fun CircularDock(
     iconSizeDp: Float,
     ringRadiusFraction: Float,
     showLabels: Boolean,
-    resolveIcon: suspend (ComponentName, String?) -> Drawable?,
+    loadIconBitmap: suspend (ComponentName, String?, Int) -> Bitmap?,
+    peekIconBitmap: (ComponentName, String?, Int) -> Bitmap? = { _, _, _ -> null },
     resolveLabel: (DockItem) -> String,
     onSelect: (Int) -> Unit,
     onLaunch: (DockSlot) -> Unit,
@@ -197,16 +197,14 @@ fun CircularDock(
                             }
                         }
                         is DockSlot.App -> {
-                            val drawable = rememberResolvedIcon(
-                                key = slot.item.componentName to slot.item.customIcon,
-                            ) {
-                                resolveIcon(slot.item.componentName, slot.item.customIcon)
-                            }
-                            AppIconImage(
-                                drawable = drawable,
-                                contentDescription = resolveLabel(slot.item),
-                                size = iconSize,
-                            )
+                        CachedAppIcon(
+                            componentName = slot.item.componentName,
+                            customIcon = slot.item.customIcon,
+                            contentDescription = resolveLabel(slot.item),
+                            size = iconSize,
+                            loadBitmap = loadIconBitmap,
+                            peekBitmap = peekIconBitmap,
+                        )
                             if (showLabels) {
                                 Label(resolveLabel(slot.item), iconSize)
                             }

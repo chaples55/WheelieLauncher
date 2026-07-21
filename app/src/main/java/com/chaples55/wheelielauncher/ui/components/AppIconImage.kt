@@ -1,6 +1,7 @@
 package com.chaples55.wheelielauncher.ui.components
 
-import android.graphics.drawable.BitmapDrawable
+import android.content.ComponentName
+import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.size
@@ -15,7 +16,39 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
-import androidx.core.graphics.drawable.toBitmap
+import com.chaples55.wheelielauncher.data.IconBitmapCache
+
+@Composable
+fun CachedAppIcon(
+    componentName: ComponentName,
+    customIcon: String?,
+    contentDescription: String?,
+    size: Dp,
+    loadBitmap: suspend (ComponentName, String?, Int) -> Bitmap?,
+    peekBitmap: (ComponentName, String?, Int) -> Bitmap? = { _, _, _ -> null },
+    modifier: Modifier = Modifier,
+) {
+    val density = LocalDensity.current
+    val px = with(density) { size.roundToPx().coerceAtLeast(1) }
+    val cacheKey = remember(componentName, customIcon, px) {
+        IconBitmapCache.key(componentName, customIcon, px)
+    }
+    var bitmap by remember(cacheKey) {
+        mutableStateOf(peekBitmap(componentName, customIcon, px))
+    }
+    LaunchedEffect(cacheKey) {
+        // Always resolve through cache — returns immediately when preloaded.
+        bitmap = loadBitmap(componentName, customIcon, px) ?: bitmap
+    }
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap!!.asImageBitmap(),
+            contentDescription = contentDescription,
+            modifier = modifier.size(size),
+            contentScale = ContentScale.Fit,
+        )
+    }
+}
 
 @Composable
 fun AppIconImage(
@@ -27,7 +60,13 @@ fun AppIconImage(
     val density = LocalDensity.current
     val px = with(density) { size.roundToPx().coerceAtLeast(1) }
     val bitmap = remember(drawable, px) {
-        drawable?.toBitmap(px, px)
+        drawable?.let {
+            android.graphics.Bitmap.createBitmap(px, px, android.graphics.Bitmap.Config.ARGB_8888).also { bmp ->
+                val canvas = android.graphics.Canvas(bmp)
+                it.setBounds(0, 0, px, px)
+                it.draw(canvas)
+            }
+        }
     }
     if (bitmap != null) {
         Image(
@@ -50,6 +89,3 @@ fun rememberResolvedIcon(
     }
     return drawable
 }
-
-fun Drawable.asBitmapDrawable(): BitmapDrawable? =
-    this as? BitmapDrawable

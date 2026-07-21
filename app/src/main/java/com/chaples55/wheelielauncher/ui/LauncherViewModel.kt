@@ -10,6 +10,7 @@ import com.chaples55.wheelielauncher.data.AppContainer
 import com.chaples55.wheelielauncher.data.AppCustomization
 import com.chaples55.wheelielauncher.data.DockItem
 import com.chaples55.wheelielauncher.data.DockRepository
+import com.chaples55.wheelielauncher.data.IconBitmapCache
 import com.chaples55.wheelielauncher.data.LauncherApp
 import com.chaples55.wheelielauncher.data.LauncherSettings
 import com.chaples55.wheelielauncher.data.NowPlayingState
@@ -20,6 +21,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -117,10 +120,15 @@ class LauncherViewModel(private val container: AppContainer) : ViewModel() {
                 }
             }
         }
-    }
-
-    fun refreshApps() {
-        viewModelScope.launch { container.installedAppsRepository.refresh() }
+        // Preload icons whenever the visible app list or icon size changes.
+        viewModelScope.launch {
+            uiState
+                .map { it.apps to it.settings.drawerIconSizeDp }
+                .distinctUntilChanged()
+                .collect { (apps, sizeDp) ->
+                    if (apps.isNotEmpty()) preloadIcons(apps, sizeDp)
+                }
+        }
     }
 
     override fun onCleared() {
@@ -153,49 +161,74 @@ class LauncherViewModel(private val container: AppContainer) : ViewModel() {
         selectedDockIndex.value = index
     }
 
-    fun stepSelection(delta: Int, slotCount: Int) {
-        if (slotCount <= 0) return
-        val next = ((selectedDockIndex.value + delta) % slotCount + slotCount) % slotCount
-        selectedDockIndex.value = next
-    }
-
-    fun rotateBy(deltaDegrees: Float) {
-        // Kept for compatibility; wheel now steps selection instead.
-        rotationDegrees.value += deltaDegrees
-    }
-
-    fun setRotation(degrees: Float) {
-        rotationDegrees.value = degrees
-    }
-
-    fun snapRotation(slotCount: Int) {
-        // No-op: icons stay fixed; selection is discrete.
-    }
-
     fun launch(componentName: ComponentName) {
         container.installedAppsRepository.launch(componentName)
-    }
-
-    fun activateSelected(dockItems: List<DockItem>, selectedSlot: Int) {
-        if (selectedSlot == 0) {
-            openDrawer()
-            return
-        }
-        val appIndex = selectedSlot - 1
-        val item = dockItems.getOrNull(appIndex) ?: return
-        launch(item.componentName)
     }
 
     fun togglePlayPause() {
         container.mediaSessionRepository.togglePlayPause()
     }
 
+    fun openNowPlayingApp() {
+        container.mediaSessionRepository.openSessionApp()
+    }
+
     fun artworkBitmap(): Bitmap? = container.mediaSessionRepository.currentArtworkBitmap()
+
+    fun blurredWallpaperBitmap(artworkBitmapKey: String?): Bitmap? {
+        if (artworkBitmapKey.isNullOrBlank()) return null
+        return container.artworkCache.getBlurred(artworkBitmapKey)
+    }
+
+    suspend fun ensureBlurredWallpaper(artworkBitmapKey: String, source: Bitmap): Bitmap? {
+        return container.artworkCache.getOrCreateBlurred(artworkBitmapKey, source)
+    }
+
+    fun peekIconBitmap(componentName: ComponentName, customIcon: String?, sizePx: Int): Bitmap? {
+        val settings = uiState.value.settings
+        val custom = customIcon ?: settings.customizations[componentName.key()]?.customIcon
+        return container.iconBitmapCache.get(IconBitmapCache.key(componentName, custom, sizePx))
+    }
 
     suspend fun resolveIcon(componentName: ComponentName, customIcon: String? = null): Drawable? {
         val settings = uiState.value.settings
         val custom = customIcon ?: settings.customizations[componentName.key()]?.customIcon
         return container.iconPackRepository.resolveIcon(componentName, custom)
+    }
+
+    suspend fun cachedIconBitmap(
+        componentName: ComponentName,
+        customIcon: String?,
+        sizePx: Int,
+    ): Bitmap? {
+        val settings = uiState.value.settings
+        val custom = customIcon ?: settings.customizations[componentName.key()]?.customIcon
+        val key = IconBitmapCache.key(componentName, custom, sizePx)
+        return container.iconBitmapCache.getOrLoad(key, sizePx) {
+            container.iconPackRepository.resolveIcon(componentName, custom)
+        }
+    }
+
+    fun preloadIcons(apps: List<LauncherApp>, sizeDp: Float) {
+        viewModelScope.launch {
+            val settings = uiState.value.settings
+            // Preload common densities so peek hits on device screens.
+            val densities = listOf(2f, 2.75f, 3f, 3.5f)
+            val sizeDps = listOf(sizeDp, settings.dockIconSizeDp).distinct()
+            for (dp in sizeDps) {
+                for (density in densities) {
+                    val sizePx = (dp * density).toInt().coerceIn(72, 256)
+                    val loaders = apps.map { app ->
+                        val custom = settings.customizations[app.componentName.key()]?.customIcon
+                        val key = IconBitmapCache.key(app.componentName, custom, sizePx)
+                        key to suspend {
+                            container.iconPackRepository.resolveIcon(app.componentName, custom)
+                        }
+                    }
+                    container.iconBitmapCache.preload(loaders, sizePx)
+                }
+            }
+        }
     }
 
     fun addToDock(componentName: ComponentName, onFull: () -> Unit) {
@@ -257,6 +290,15 @@ class LauncherViewModel(private val container: AppContainer) : ViewModel() {
 
     fun refreshMedia() {
         container.mediaSessionRepository.refreshSessions()
+    }
+
+    fun refreshApps() {
+        viewModelScope.launch {
+            container.installedAppsRepository.refresh()
+            val apps = uiState.value.apps
+            val size = uiState.value.settings.drawerIconSizeDp
+            preloadIcons(apps, size)
+        }
     }
 
     companion object {

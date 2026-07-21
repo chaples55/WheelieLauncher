@@ -27,8 +27,6 @@ data class LauncherSettings(
     val dockIconSizeDp: Float = 48f,
     val drawerIconSizeDp: Float = 48f,
     val drawerColumns: Int = 4,
-    val interceptVolumeAsWheel: Boolean = false,
-    val interceptPlayPause: Boolean = false,
     val showStatusBar: Boolean = true,
     val statusBarScrimOpacity: Float = 0.4f,
     val defaultWallpaperUri: String? = null,
@@ -53,6 +51,8 @@ data class NowPlayingState(
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
     val hasSession: Boolean = false,
+    /** Package of the app owning the active media session. */
+    val sourcePackage: String? = null,
 )
 
 fun ComponentName.key(): String = flattenToString()

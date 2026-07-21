@@ -2,6 +2,7 @@ package com.chaples55.wheelielauncher.media
 
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.media.MediaMetadata
 import android.media.session.MediaController
@@ -10,21 +11,28 @@ import android.media.session.PlaybackState
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import com.chaples55.wheelielauncher.data.ArtworkCache
 import com.chaples55.wheelielauncher.data.NowPlayingState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class MediaSessionRepository(private val context: Context) {
+class MediaSessionRepository(
+    private val context: Context,
+    private val artworkCache: ArtworkCache,
+) {
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val _state = MutableStateFlow(NowPlayingState())
     val state: StateFlow<NowPlayingState> = _state.asStateFlow()
 
-    @Volatile
-    private var artworkBitmap: Bitmap? = null
-
     private var controller: MediaController? = null
     private var listening = false
+    private var lastArtKey: String? = null
 
     private val sessionListener = MediaSessionManager.OnActiveSessionsChangedListener { sessions ->
         bindBestSession(sessions)
@@ -46,7 +54,7 @@ class MediaSessionRepository(private val context: Context) {
             val c = controller
             if (c != null && c.playbackState?.state == PlaybackState.STATE_PLAYING) {
                 publish(updatePositionOnly = true)
-                mainHandler.postDelayed(this, 1000L)
+                mainHandler.postDelayed(this, 2000L)
             }
         }
     }
@@ -91,7 +99,17 @@ class MediaSessionRepository(private val context: Context) {
         if (playing) c.transportControls.pause() else c.transportControls.play()
     }
 
-    fun currentArtworkBitmap(): Bitmap? = artworkBitmap
+    fun openSessionApp() {
+        val pkg = controller?.packageName ?: _state.value.sourcePackage ?: return
+        val launch = context.packageManager.getLaunchIntentForPackage(pkg) ?: return
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(launch)
+    }
+
+    fun currentArtworkBitmap(): Bitmap? {
+        val key = _state.value.artworkBitmapKey ?: return null
+        return artworkCache.getArt(key)
+    }
 
     private fun bindBestSession(sessions: List<MediaController>?) {
         val best = sessions
@@ -110,7 +128,7 @@ class MediaSessionRepository(private val context: Context) {
     private fun publish(updatePositionOnly: Boolean = false) {
         val c = controller
         if (c == null) {
-            artworkBitmap = null
+            lastArtKey = null
             _state.value = NowPlayingState()
             mainHandler.removeCallbacks(progressTicker)
             return
@@ -122,12 +140,12 @@ class MediaSessionRepository(private val context: Context) {
 
         if (updatePositionOnly) {
             val current = _state.value
-            if (current.hasSession && current.positionMs != position) {
+            if (current.hasSession) {
                 _state.value = current.copy(positionMs = position, isPlaying = isPlaying)
             }
             mainHandler.removeCallbacks(progressTicker)
             if (isPlaying) {
-                mainHandler.postDelayed(progressTicker, 1000L)
+                mainHandler.postDelayed(progressTicker, 2000L)
             }
             return
         }
@@ -136,12 +154,21 @@ class MediaSessionRepository(private val context: Context) {
             ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
         val artUri = metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
             ?: metadata?.getString(MediaMetadata.METADATA_KEY_ART_URI)
-        artworkBitmap = bitmap
         val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
-        // Stable key: avoid bitmap.generationId which can change and flicker wallpaper.
-        val artKey = listOfNotNull(title, artUri, bitmap?.byteCount?.toString())
+        val artKey = listOfNotNull(c.packageName, title, artUri, bitmap?.byteCount?.toString())
             .joinToString("|")
             .ifBlank { null }
+
+        if (artKey != null && bitmap != null && artKey != lastArtKey) {
+            artworkCache.putArt(artKey, bitmap)
+            lastArtKey = artKey
+            scope.launch(Dispatchers.Default) {
+                artworkCache.getOrCreateBlurred(artKey, bitmap)
+            }
+        } else if (artKey != null) {
+            lastArtKey = artKey
+        }
+
         _state.value = NowPlayingState(
             title = title,
             artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST),
@@ -151,6 +178,7 @@ class MediaSessionRepository(private val context: Context) {
             positionMs = position,
             durationMs = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L,
             hasSession = true,
+            sourcePackage = c.packageName,
         )
         mainHandler.removeCallbacks(progressTicker)
         if (isPlaying) {

@@ -77,14 +77,18 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
         )
     }
     val artworkBitmap = remember(artKey) { viewModel.artworkBitmap() }
+    val blurredBitmap = remember(artKey) { viewModel.blurredWallpaperBitmap(np.artworkBitmapKey) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         WallpaperBackground(
             artKey = artKey,
             isMediaArt = np.hasSession && artKey.startsWith("media:"),
+            artworkBitmapKey = np.artworkBitmapKey,
             artworkBitmap = artworkBitmap,
+            blurredBitmap = blurredBitmap,
             artworkUri = np.artworkUri,
             defaultWallpaperUri = state.settings.defaultWallpaperUri,
+            ensureBlurred = { key, bmp -> viewModel.ensureBlurredWallpaper(key, bmp) },
         )
 
         if (state.settings.showStatusBar) {
@@ -111,7 +115,8 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
                 iconSizeDp = state.settings.dockIconSizeDp,
                 ringRadiusFraction = state.settings.dockRingRadiusFraction,
                 showLabels = state.settings.dockShowLabels,
-                resolveIcon = { cn, custom -> viewModel.resolveIcon(cn, custom) },
+                loadIconBitmap = { cn, custom, px -> viewModel.cachedIconBitmap(cn, custom, px) },
+                peekIconBitmap = { cn, custom, px -> viewModel.peekIconBitmap(cn, custom, px) },
                 resolveLabel = { item ->
                     item.customLabel
                         ?: state.settings.customizations[item.componentName.key()]?.customLabel
@@ -134,6 +139,7 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
                 nowPlaying = np,
                 artworkBitmap = artworkBitmap,
                 diameter = state.settings.nowPlayingSizeDp.dp,
+                onOpenApp = { viewModel.openNowPlayingApp() },
                 onPlayPause = { viewModel.togglePlayPause() },
             )
         }
@@ -142,7 +148,8 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
             AppDrawer(
                 apps = state.apps,
                 settings = state.settings,
-                resolveIcon = { cn, custom -> viewModel.resolveIcon(cn, custom) },
+                loadIconBitmap = { cn, custom, px -> viewModel.cachedIconBitmap(cn, custom, px) },
+                peekIconBitmap = { cn, custom, px -> viewModel.peekIconBitmap(cn, custom, px) },
                 onDismiss = { viewModel.closeDrawer() },
                 onOpenSettings = { viewModel.openSettings() },
                 onLaunch = {

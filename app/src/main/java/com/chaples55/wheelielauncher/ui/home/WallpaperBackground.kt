@@ -2,11 +2,8 @@ package com.chaples55.wheelielauncher.ui.home
 
 import android.graphics.Bitmap
 import android.net.Uri
-import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -18,13 +15,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+
+private sealed class WallpaperContent {
+    data class BitmapLayer(val key: String, val bitmap: ImageBitmap) : WallpaperContent()
+    data class UriLayer(val key: String, val uri: Uri) : WallpaperContent()
+    data class Gradient(val key: String) : WallpaperContent()
+}
 
 @Composable
 fun WallpaperBackground(
@@ -38,59 +43,67 @@ fun WallpaperBackground(
     ensureBlurred: suspend (String, Bitmap) -> Bitmap?,
     modifier: Modifier = Modifier,
 ) {
-    var wallpaperBmp by remember(artKey) { mutableStateOf(blurredBitmap) }
-
+    var resolvedBlur by remember { mutableStateOf(blurredBitmap) }
     LaunchedEffect(artKey, artworkBitmap) {
         if (isMediaArt && artworkBitmapKey != null && artworkBitmap != null) {
-            wallpaperBmp = blurredBitmap
+            resolvedBlur = blurredBitmap
                 ?: ensureBlurred(artworkBitmapKey, artworkBitmap)
         } else {
-            wallpaperBmp = null
+            resolvedBlur = null
         }
     }
 
+    val target: WallpaperContent = remember(artKey, resolvedBlur, artworkUri, defaultWallpaperUri) {
+        when {
+            artKey.startsWith("media:") && resolvedBlur != null ->
+                WallpaperContent.BitmapLayer(artKey, resolvedBlur!!.asImageBitmap())
+            artKey.startsWith("media:") && artworkUri != null ->
+                WallpaperContent.UriLayer(artKey, artworkUri)
+            artKey.startsWith("default:") && defaultWallpaperUri != null ->
+                WallpaperContent.UriLayer(artKey, Uri.parse(defaultWallpaperUri))
+            else -> WallpaperContent.Gradient(artKey)
+        }
+    }
+
+    var displayed by remember { mutableStateOf(target) }
+    val fade = remember { Animatable(1f) }
+
+    LaunchedEffect(target) {
+        if (target.key() == displayed.key()) {
+            displayed = target
+            fade.snapTo(1f)
+            return@LaunchedEffect
+        }
+        fade.animateTo(0f, tween(180))
+        displayed = target
+        fade.snapTo(0f)
+        fade.animateTo(1f, tween(220))
+    }
+
     Box(modifier = modifier.fillMaxSize().background(Color(0xFF0D0D0F))) {
-        AnimatedContent(
-            targetState = artKey,
-            transitionSpec = {
-                fadeIn(animationSpec = tween(350)) togetherWith
-                    fadeOut(animationSpec = tween(350))
-            },
-            label = "wallpaper",
-        ) { key ->
-            when {
-                key.startsWith("media:") && wallpaperBmp != null -> {
+        Box(modifier = Modifier.fillMaxSize().alpha(fade.value)) {
+            when (val content = displayed) {
+                is WallpaperContent.BitmapLayer -> {
                     Image(
-                        bitmap = wallpaperBmp!!.asImageBitmap(),
+                        bitmap = content.bitmap,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
-                key.startsWith("media:") && artworkUri != null -> {
+                is WallpaperContent.UriLayer -> {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
-                            .data(artworkUri)
+                            .data(content.uri)
                             .crossfade(false)
+                            .memoryCacheKey(content.key)
                             .build(),
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
-                key.startsWith("default:") && defaultWallpaperUri != null -> {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(Uri.parse(defaultWallpaperUri))
-                            .crossfade(false)
-                            .memoryCacheKey(defaultWallpaperUri)
-                            .build(),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-                else -> {
+                is WallpaperContent.Gradient -> {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -113,6 +126,12 @@ fun WallpaperBackground(
                 .background(Color.Black.copy(alpha = 0.35f)),
         )
     }
+}
+
+private fun WallpaperContent.key(): String = when (this) {
+    is WallpaperContent.BitmapLayer -> key
+    is WallpaperContent.UriLayer -> key
+    is WallpaperContent.Gradient -> key
 }
 
 fun wallpaperArtKey(

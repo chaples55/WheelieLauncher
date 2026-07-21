@@ -55,4 +55,39 @@ data class NowPlayingState(
     val sourcePackage: String? = null,
 )
 
+/** Metadata / artwork that should invalidate wallpaper + center art (not progress ticks). */
+data class NowPlayingMeta(
+    val title: String? = null,
+    val artist: String? = null,
+    val artworkUri: Uri? = null,
+    val artworkBitmapKey: String? = null,
+    val isPlaying: Boolean = false,
+    val durationMs: Long = 0L,
+    val hasSession: Boolean = false,
+    val sourcePackage: String? = null,
+)
+
+data class PlaybackProgress(
+    val positionMs: Long = 0L,
+    val durationMs: Long = 0L,
+    val isPlaying: Boolean = false,
+)
+
+fun NowPlayingState.toMeta() = NowPlayingMeta(
+    title = title,
+    artist = artist,
+    artworkUri = artworkUri,
+    artworkBitmapKey = artworkBitmapKey,
+    isPlaying = isPlaying,
+    durationMs = durationMs,
+    hasSession = hasSession,
+    sourcePackage = sourcePackage,
+)
+
+fun NowPlayingState.toProgress() = PlaybackProgress(
+    positionMs = positionMs,
+    durationMs = durationMs,
+    isPlaying = isPlaying,
+)
+
 fun ComponentName.key(): String = flattenToString()

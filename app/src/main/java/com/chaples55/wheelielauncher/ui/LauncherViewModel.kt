@@ -13,7 +13,8 @@ import com.chaples55.wheelielauncher.data.DockRepository
 import com.chaples55.wheelielauncher.data.IconBitmapCache
 import com.chaples55.wheelielauncher.data.LauncherApp
 import com.chaples55.wheelielauncher.data.LauncherSettings
-import com.chaples55.wheelielauncher.data.NowPlayingState
+import com.chaples55.wheelielauncher.data.NowPlayingMeta
+import com.chaples55.wheelielauncher.data.PlaybackProgress
 import com.chaples55.wheelielauncher.data.SettingsRepository
 import com.chaples55.wheelielauncher.data.key
 import com.chaples55.wheelielauncher.icons.IconPackInfo
@@ -30,52 +31,46 @@ data class HomeUiState(
     val settings: LauncherSettings = LauncherSettings(),
     val dockItems: List<DockItem> = emptyList(),
     val apps: List<LauncherApp> = emptyList(),
-    val nowPlaying: NowPlayingState = NowPlayingState(),
     val drawerOpen: Boolean = false,
     val settingsOpen: Boolean = false,
     val selectedDockIndex: Int = 0,
-    val rotationDegrees: Float = 0f,
     val iconPacks: List<IconPackInfo> = emptyList(),
     val showOnboardingHome: Boolean = false,
     val showOnboardingMedia: Boolean = false,
+    /** packageName -> label for dock resolve without scanning apps each frame. */
+    val appLabelsByComponent: Map<String, String> = emptyMap(),
 )
 
 class LauncherViewModel(private val container: AppContainer) : ViewModel() {
     private val drawerOpen = MutableStateFlow(false)
     private val settingsOpen = MutableStateFlow(false)
     private val selectedDockIndex = MutableStateFlow(0)
-    private val rotationDegrees = MutableStateFlow(0f)
     private val showOnboardingHome = MutableStateFlow(false)
     private val showOnboardingMedia = MutableStateFlow(false)
+    private val iconDensity = MutableStateFlow(3f)
 
     private data class NavState(
         val drawerOpen: Boolean,
         val settingsOpen: Boolean,
         val selectedDockIndex: Int,
-        val rotationDegrees: Float,
         val showOnboardingHome: Boolean,
         val showOnboardingMedia: Boolean,
     )
 
     private val navState = combine(
-        combine(drawerOpen, settingsOpen, selectedDockIndex) { d, s, i -> Triple(d, s, i) },
-        combine(rotationDegrees, showOnboardingHome, showOnboardingMedia) { r, h, m -> Triple(r, h, m) },
-    ) { a, b ->
-        NavState(
-            drawerOpen = a.first,
-            settingsOpen = a.second,
-            selectedDockIndex = a.third,
-            rotationDegrees = b.first,
-            showOnboardingHome = b.second,
-            showOnboardingMedia = b.third,
-        )
+        drawerOpen,
+        settingsOpen,
+        selectedDockIndex,
+        showOnboardingHome,
+        showOnboardingMedia,
+    ) { d, s, i, h, m ->
+        NavState(d, s, i, h, m)
     }
 
     private data class CoreState(
         val settings: LauncherSettings,
         val dockItems: List<DockItem>,
         val apps: List<LauncherApp>,
-        val nowPlaying: NowPlayingState,
         val iconPacks: List<IconPackInfo>,
     )
 
@@ -83,10 +78,9 @@ class LauncherViewModel(private val container: AppContainer) : ViewModel() {
         container.settingsRepository.settings,
         container.dockRepository.dockItems,
         container.installedAppsRepository.apps(),
-        container.mediaSessionRepository.state,
         container.iconPackRepository.installedPacks(),
-    ) { settings, dock, apps, media, packs ->
-        CoreState(settings, dock, apps, media, packs)
+    ) { settings, dock, apps, packs ->
+        CoreState(settings, dock, apps, packs)
     }
 
     val uiState: StateFlow<HomeUiState> = combine(coreState, navState) { core, nav ->
@@ -94,16 +88,18 @@ class LauncherViewModel(private val container: AppContainer) : ViewModel() {
             settings = core.settings,
             dockItems = core.dockItems,
             apps = core.apps,
-            nowPlaying = core.nowPlaying,
             drawerOpen = nav.drawerOpen,
             settingsOpen = nav.settingsOpen,
             selectedDockIndex = nav.selectedDockIndex,
-            rotationDegrees = nav.rotationDegrees,
             iconPacks = core.iconPacks,
             showOnboardingHome = nav.showOnboardingHome,
             showOnboardingMedia = nav.showOnboardingMedia,
+            appLabelsByComponent = core.apps.associate { it.componentName.key() to it.label },
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, HomeUiState())
+
+    val nowPlayingMeta: StateFlow<NowPlayingMeta> = container.mediaSessionRepository.nowPlayingMeta
+    val playbackProgress: StateFlow<PlaybackProgress> = container.mediaSessionRepository.progress
 
     init {
         viewModelScope.launch {
@@ -120,20 +116,40 @@ class LauncherViewModel(private val container: AppContainer) : ViewModel() {
                 }
             }
         }
-        // Preload icons whenever the visible app list or icon size changes.
         viewModelScope.launch {
-            uiState
-                .map { it.apps to it.settings.drawerIconSizeDp }
+            combine(
+                uiState.map {
+                    Triple(it.apps, it.settings.drawerIconSizeDp, it.settings.dockIconSizeDp)
+                },
+                iconDensity,
+            ) { triple, density ->
+                PreloadRequest(triple.first, triple.second, triple.third, density)
+            }
                 .distinctUntilChanged()
-                .collect { (apps, sizeDp) ->
-                    if (apps.isNotEmpty()) preloadIcons(apps, sizeDp)
+                .collect { req ->
+                    if (req.apps.isNotEmpty()) {
+                        preloadIcons(req.apps, req.drawerSizeDp, req.dockSizeDp, req.density)
+                    }
                 }
         }
     }
 
+    private data class PreloadRequest(
+        val apps: List<LauncherApp>,
+        val drawerSizeDp: Float,
+        val dockSizeDp: Float,
+        val density: Float,
+    )
+
     override fun onCleared() {
         container.mediaSessionRepository.stop()
         super.onCleared()
+    }
+
+    fun setIconDensity(density: Float) {
+        if (density > 0f && iconDensity.value != density) {
+            iconDensity.value = density
+        }
     }
 
     fun openDrawer() {
@@ -209,24 +225,25 @@ class LauncherViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    fun preloadIcons(apps: List<LauncherApp>, sizeDp: Float) {
+    private fun preloadIcons(
+        apps: List<LauncherApp>,
+        drawerSizeDp: Float,
+        dockSizeDp: Float,
+        density: Float,
+    ) {
         viewModelScope.launch {
             val settings = uiState.value.settings
-            // Preload common densities so peek hits on device screens.
-            val densities = listOf(2f, 2.75f, 3f, 3.5f)
-            val sizeDps = listOf(sizeDp, settings.dockIconSizeDp).distinct()
+            val sizeDps = listOf(drawerSizeDp, dockSizeDp).distinct()
             for (dp in sizeDps) {
-                for (density in densities) {
-                    val sizePx = (dp * density).toInt().coerceIn(72, 256)
-                    val loaders = apps.map { app ->
-                        val custom = settings.customizations[app.componentName.key()]?.customIcon
-                        val key = IconBitmapCache.key(app.componentName, custom, sizePx)
-                        key to suspend {
-                            container.iconPackRepository.resolveIcon(app.componentName, custom)
-                        }
+                val sizePx = (dp * density).toInt().coerceIn(72, 256)
+                val loaders = apps.map { app ->
+                    val custom = settings.customizations[app.componentName.key()]?.customIcon
+                    val key = IconBitmapCache.key(app.componentName, custom, sizePx)
+                    key to suspend {
+                        container.iconPackRepository.resolveIcon(app.componentName, custom)
                     }
-                    container.iconBitmapCache.preload(loaders, sizePx)
                 }
+                container.iconBitmapCache.preload(loaders, sizePx)
             }
         }
     }
@@ -295,9 +312,6 @@ class LauncherViewModel(private val container: AppContainer) : ViewModel() {
     fun refreshApps() {
         viewModelScope.launch {
             container.installedAppsRepository.refresh()
-            val apps = uiState.value.apps
-            val size = uiState.value.settings.drawerIconSizeDp
-            preloadIcons(apps, size)
         }
     }
 

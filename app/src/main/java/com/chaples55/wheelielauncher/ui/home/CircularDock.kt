@@ -23,6 +23,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.Stable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -53,6 +54,15 @@ sealed class DockSlot {
     data object Empty : DockSlot()
 }
 
+/** Drag state held outside slot composables so only the dragged slot reads dragX/Y. */
+@Stable
+private class DockDragState {
+    var draggingCn by mutableStateOf<ComponentName?>(null)
+    var dragX by mutableFloatStateOf(0f)
+    var dragY by mutableFloatStateOf(0f)
+    var dragMoved by mutableStateOf(false)
+}
+
 @Composable
 fun CircularDock(
     dockItems: List<DockItem>,
@@ -76,10 +86,7 @@ fun CircularDock(
     var widthPx by remember { mutableIntStateOf(0) }
     var heightPx by remember { mutableIntStateOf(0) }
     var menuFor by remember { mutableStateOf<ComponentName?>(null) }
-    var draggingCn by remember { mutableStateOf<ComponentName?>(null) }
-    var dragX by remember { mutableFloatStateOf(0f) }
-    var dragY by remember { mutableFloatStateOf(0f) }
-    var dragMoved by remember { mutableStateOf(false) }
+    val dragState = remember { DockDragState() }
 
     val placements = remember(dockItems, slotCount) {
         computeFixedPlacements(dockItems, slotCount)
@@ -104,115 +111,171 @@ fun CircularDock(
             val angleRad = Math.toRadians(placement.angleDegrees.toDouble())
             val homeX = cx + radius * cos(angleRad).toFloat()
             val homeY = cy + radius * sin(angleRad).toFloat()
-            val appSlot = placement.slot as? DockSlot.App
-            val isDraggingThis = appSlot != null && appSlot.item.componentName == draggingCn
-            val x = if (isDraggingThis) dragX else homeX
-            val y = if (isDraggingThis) dragY else homeY
-            val offsetX = (x - iconPx / 2f).roundToInt()
-            val offsetY = (y - iconPx / 2f).roundToInt()
+            DockSlotItem(
+                placement = placement,
+                homeX = homeX,
+                homeY = homeY,
+                cx = cx,
+                cy = cy,
+                iconPx = iconPx,
+                iconSize = iconSize,
+                touchSlop = touchSlop,
+                showLabels = showLabels,
+                dragState = dragState,
+                placements = placements,
+                dockItemCount = dockItems.size,
+                menuFor = menuFor,
+                onMenuForChange = { menuFor = it },
+                loadIconBitmap = loadIconBitmap,
+                peekIconBitmap = peekIconBitmap,
+                resolveLabel = resolveLabel,
+                onSelect = onSelect,
+                onLaunch = onLaunch,
+                onRemove = onRemove,
+                onReorder = onReorder,
+            )
+        }
+    }
+}
 
-            Box(
-                modifier = Modifier
-                    .offset { IntOffset(offsetX, offsetY) }
-                    .graphicsLayer {
-                        alpha = if (isDraggingThis && dragMoved) 0.85f else 1f
-                    }
-                    .pointerInput(placement.slot, placement.slotIndex) {
-                        detectTapGestures(
-                            onTap = {
+@Composable
+private fun DockSlotItem(
+    placement: Placement,
+    homeX: Float,
+    homeY: Float,
+    cx: Float,
+    cy: Float,
+    iconPx: Float,
+    iconSize: androidx.compose.ui.unit.Dp,
+    touchSlop: Float,
+    showLabels: Boolean,
+    dragState: DockDragState,
+    placements: List<Placement>,
+    dockItemCount: Int,
+    menuFor: ComponentName?,
+    onMenuForChange: (ComponentName?) -> Unit,
+    loadIconBitmap: suspend (ComponentName, String?, Int) -> Bitmap?,
+    peekIconBitmap: (ComponentName, String?, Int) -> Bitmap?,
+    resolveLabel: (DockItem) -> String,
+    onSelect: (Int) -> Unit,
+    onLaunch: (DockSlot) -> Unit,
+    onRemove: (ComponentName) -> Unit,
+    onReorder: (ComponentName, Int) -> Unit,
+) {
+    val appSlot = placement.slot as? DockSlot.App
+    val cn = appSlot?.item?.componentName
+    // Non-dragged slots only observe draggingCn (start/end), not per-frame dragX/Y.
+    val isDraggingThis = cn != null && dragState.draggingCn == cn
+    val x = if (isDraggingThis) dragState.dragX else homeX
+    val y = if (isDraggingThis) dragState.dragY else homeY
+    val dragMoved = if (isDraggingThis) dragState.dragMoved else false
+    val offsetX = (x - iconPx / 2f).roundToInt()
+    val offsetY = (y - iconPx / 2f).roundToInt()
+
+    Box(
+        modifier = Modifier
+            .offset { IntOffset(offsetX, offsetY) }
+            .graphicsLayer {
+                alpha = if (isDraggingThis && dragMoved) 0.85f else 1f
+            }
+            .pointerInput(placement.slot, placement.slotIndex) {
+                detectTapGestures(
+                    onTap = {
+                        onSelect(placement.slotIndex)
+                        onLaunch(placement.slot)
+                    },
+                )
+            }
+            .then(
+                if (appSlot != null) {
+                    Modifier.pointerInput(appSlot.item.componentName, placements, homeX, homeY, cx, cy) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = {
                                 onSelect(placement.slotIndex)
-                                onLaunch(placement.slot)
+                                dragState.draggingCn = appSlot.item.componentName
+                                dragState.dragX = homeX
+                                dragState.dragY = homeY
+                                dragState.dragMoved = false
+                                onMenuForChange(null)
+                            },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                dragState.dragX += dragAmount.x
+                                dragState.dragY += dragAmount.y
+                                if (hypot(
+                                        (dragState.dragX - homeX).toDouble(),
+                                        (dragState.dragY - homeY).toDouble(),
+                                    ) > touchSlop
+                                ) {
+                                    dragState.dragMoved = true
+                                }
+                            },
+                            onDragEnd = {
+                                if (!dragState.dragMoved) {
+                                    onMenuForChange(appSlot.item.componentName)
+                                } else {
+                                    val angle = angleFromAtan(
+                                        atan2(dragState.dragY - cy, dragState.dragX - cx) * (180f / PI.toFloat()),
+                                    )
+                                    val target = nearestAppSlotIndex(angle, placements, dockItemCount)
+                                    if (target != null) {
+                                        onReorder(appSlot.item.componentName, target)
+                                    }
+                                }
+                                dragState.draggingCn = null
+                                dragState.dragMoved = false
+                            },
+                            onDragCancel = {
+                                dragState.draggingCn = null
+                                dragState.dragMoved = false
                             },
                         )
                     }
-                    .then(
-                        if (appSlot != null) {
-                            Modifier.pointerInput(appSlot.item.componentName, placements, homeX, homeY, cx, cy) {
-                                detectDragGesturesAfterLongPress(
-                                    onDragStart = {
-                                        onSelect(placement.slotIndex)
-                                        draggingCn = appSlot.item.componentName
-                                        dragX = homeX
-                                        dragY = homeY
-                                        dragMoved = false
-                                        menuFor = null
-                                    },
-                                    onDrag = { change, dragAmount ->
-                                        change.consume()
-                                        dragX += dragAmount.x
-                                        dragY += dragAmount.y
-                                        if (hypot((dragX - homeX).toDouble(), (dragY - homeY).toDouble()) > touchSlop) {
-                                            dragMoved = true
-                                        }
-                                    },
-                                    onDragEnd = {
-                                        if (!dragMoved) {
-                                            menuFor = appSlot.item.componentName
-                                        } else {
-                                            val angle = angleFromAtan(
-                                                atan2(dragY - cy, dragX - cx) * (180f / PI.toFloat()),
-                                            )
-                                            val target = nearestAppSlotIndex(angle, placements, dockItems.size)
-                                            if (target != null) {
-                                                onReorder(appSlot.item.componentName, target)
-                                            }
-                                        }
-                                        draggingCn = null
-                                        dragMoved = false
-                                    },
-                                    onDragCancel = {
-                                        draggingCn = null
-                                        dragMoved = false
-                                    },
-                                )
-                            }
-                        } else {
-                            Modifier
-                        },
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    when (val slot = placement.slot) {
-                        DockSlot.Drawer -> {
-                            Icon(
-                                imageVector = Icons.Filled.Apps,
-                                contentDescription = stringResource(R.string.app_drawer),
-                                tint = Color.White,
-                                modifier = Modifier.size(iconSize),
-                            )
-                            if (showLabels) {
-                                Label(stringResource(R.string.app_drawer), iconSize)
-                            }
-                        }
-                        is DockSlot.App -> {
-                        CachedAppIcon(
-                            componentName = slot.item.componentName,
-                            customIcon = slot.item.customIcon,
-                            contentDescription = resolveLabel(slot.item),
-                            size = iconSize,
-                            loadBitmap = loadIconBitmap,
-                            peekBitmap = peekIconBitmap,
-                        )
-                            if (showLabels) {
-                                Label(resolveLabel(slot.item), iconSize)
-                            }
-                        }
-                        DockSlot.Empty -> Box(modifier = Modifier.size(iconSize))
+                } else {
+                    Modifier
+                },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            when (val slot = placement.slot) {
+                DockSlot.Drawer -> {
+                    Icon(
+                        imageVector = Icons.Filled.Apps,
+                        contentDescription = stringResource(R.string.app_drawer),
+                        tint = Color.White,
+                        modifier = Modifier.size(iconSize),
+                    )
+                    if (showLabels) {
+                        Label(stringResource(R.string.app_drawer), iconSize)
                     }
                 }
+                is DockSlot.App -> {
+                    CachedAppIcon(
+                        componentName = slot.item.componentName,
+                        customIcon = slot.item.customIcon,
+                        contentDescription = resolveLabel(slot.item),
+                        size = iconSize,
+                        loadBitmap = loadIconBitmap,
+                        peekBitmap = peekIconBitmap,
+                    )
+                    if (showLabels) {
+                        Label(resolveLabel(slot.item), iconSize)
+                    }
+                }
+                DockSlot.Empty -> Box(modifier = Modifier.size(iconSize))
+            }
+        }
 
-                if (appSlot != null && menuFor == appSlot.item.componentName) {
-                    DropdownMenu(expanded = true, onDismissRequest = { menuFor = null }) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.remove_from_dock)) },
-                            onClick = {
-                                menuFor = null
-                                onRemove(appSlot.item.componentName)
-                            },
-                        )
-                    }
-                }
+        if (appSlot != null && menuFor == appSlot.item.componentName) {
+            DropdownMenu(expanded = true, onDismissRequest = { onMenuForChange(null) }) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.remove_from_dock)) },
+                    onClick = {
+                        onMenuForChange(null)
+                        onRemove(appSlot.item.componentName)
+                    },
+                )
             }
         }
     }

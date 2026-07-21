@@ -2,6 +2,7 @@ package com.chaples55.wheelielauncher.ui
 
 import android.content.ComponentName
 import android.content.Intent
+import android.graphics.Bitmap
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -25,12 +26,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chaples55.wheelielauncher.R
 import com.chaples55.wheelielauncher.WheelieApp
 import com.chaples55.wheelielauncher.data.AppCustomization
+import com.chaples55.wheelielauncher.data.DockItem
 import com.chaples55.wheelielauncher.data.key
 import com.chaples55.wheelielauncher.ui.drawer.AppDrawer
 import com.chaples55.wheelielauncher.ui.home.CircularDock
@@ -47,11 +50,17 @@ import kotlinx.coroutines.withContext
 @Composable
 fun LauncherRoot(viewModel: LauncherViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val nowPlayingMeta by viewModel.nowPlayingMeta.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val density = LocalDensity.current.density
     val app = context.applicationContext as WheelieApp
     var iconPickerFor by remember { mutableStateOf<ComponentName?>(null) }
     var showHidden by remember { mutableStateOf(false) }
     var packageLabels by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+
+    LaunchedEffect(density) {
+        viewModel.setIconDensity(density)
+    }
 
     LaunchedEffect(state.settings.hiddenPackages) {
         packageLabels = withContext(Dispatchers.IO) {
@@ -67,28 +76,70 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
     }
 
     val slotCount = LauncherViewModel.slotCountFor(state.dockItems.size)
-    val np = state.nowPlaying
-    val artKey = remember(np.hasSession, np.artworkBitmapKey, np.artworkUri, state.settings.defaultWallpaperUri) {
+    val artKey = remember(
+        nowPlayingMeta.hasSession,
+        nowPlayingMeta.artworkBitmapKey,
+        nowPlayingMeta.artworkUri,
+        state.settings.defaultWallpaperUri,
+    ) {
         wallpaperArtKey(
-            hasSession = np.hasSession,
-            artworkBitmapKey = np.artworkBitmapKey,
-            artworkUri = np.artworkUri,
+            hasSession = nowPlayingMeta.hasSession,
+            artworkBitmapKey = nowPlayingMeta.artworkBitmapKey,
+            artworkUri = nowPlayingMeta.artworkUri,
             defaultWallpaperUri = state.settings.defaultWallpaperUri,
         )
     }
     val artworkBitmap = remember(artKey) { viewModel.artworkBitmap() }
-    val blurredBitmap = remember(artKey) { viewModel.blurredWallpaperBitmap(np.artworkBitmapKey) }
+    val blurredBitmap = remember(artKey) {
+        viewModel.blurredWallpaperBitmap(nowPlayingMeta.artworkBitmapKey)
+    }
+
+    val loadIconBitmap: suspend (ComponentName, String?, Int) -> Bitmap? = remember(viewModel) {
+        { cn, custom, px -> viewModel.cachedIconBitmap(cn, custom, px) }
+    }
+    val peekIconBitmap: (ComponentName, String?, Int) -> Bitmap? = remember(viewModel) {
+        { cn, custom, px -> viewModel.peekIconBitmap(cn, custom, px) }
+    }
+    val onSelectDock = remember(viewModel) { { index: Int -> viewModel.setSelectedDockIndex(index) } }
+    val onLaunchDock = remember(viewModel) {
+        { slot: DockSlot ->
+            when (slot) {
+                DockSlot.Drawer -> viewModel.openDrawer()
+                is DockSlot.App -> viewModel.launch(slot.item.componentName)
+                DockSlot.Empty -> Unit
+            }
+        }
+    }
+    val onRemoveDock = remember(viewModel) { { cn: ComponentName -> viewModel.removeFromDock(cn) } }
+    val onReorderDock = remember(viewModel) {
+        { cn: ComponentName, index: Int -> viewModel.moveDockItem(cn, index) }
+    }
+    val onOpenNowPlaying = remember(viewModel) { { viewModel.openNowPlayingApp() } }
+    val onPlayPause = remember(viewModel) { { viewModel.togglePlayPause() } }
+    val ensureBlurred: suspend (String, Bitmap) -> Bitmap? = remember(viewModel) {
+        { key, bmp -> viewModel.ensureBlurredWallpaper(key, bmp) }
+    }
+    val labelsByComponent = state.appLabelsByComponent
+    val customizations = state.settings.customizations
+    val resolveLabel = remember(labelsByComponent, customizations) {
+        { item: DockItem ->
+            item.customLabel
+                ?: customizations[item.componentName.key()]?.customLabel
+                ?: labelsByComponent[item.componentName.key()]
+                ?: item.componentName.packageName
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         WallpaperBackground(
             artKey = artKey,
-            isMediaArt = np.hasSession && artKey.startsWith("media:"),
-            artworkBitmapKey = np.artworkBitmapKey,
+            isMediaArt = nowPlayingMeta.hasSession && artKey.startsWith("media:"),
+            artworkBitmapKey = nowPlayingMeta.artworkBitmapKey,
             artworkBitmap = artworkBitmap,
             blurredBitmap = blurredBitmap,
-            artworkUri = np.artworkUri,
+            artworkUri = nowPlayingMeta.artworkUri,
             defaultWallpaperUri = state.settings.defaultWallpaperUri,
-            ensureBlurred = { key, bmp -> viewModel.ensureBlurredWallpaper(key, bmp) },
+            ensureBlurred = ensureBlurred,
         )
 
         if (state.settings.showStatusBar) {
@@ -115,32 +166,22 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
                 iconSizeDp = state.settings.dockIconSizeDp,
                 ringRadiusFraction = state.settings.dockRingRadiusFraction,
                 showLabels = state.settings.dockShowLabels,
-                loadIconBitmap = { cn, custom, px -> viewModel.cachedIconBitmap(cn, custom, px) },
-                peekIconBitmap = { cn, custom, px -> viewModel.peekIconBitmap(cn, custom, px) },
-                resolveLabel = { item ->
-                    item.customLabel
-                        ?: state.settings.customizations[item.componentName.key()]?.customLabel
-                        ?: state.apps.find { it.componentName == item.componentName }?.label
-                        ?: item.componentName.packageName
-                },
-                onSelect = { viewModel.setSelectedDockIndex(it) },
-                onLaunch = { slot ->
-                    when (slot) {
-                        DockSlot.Drawer -> viewModel.openDrawer()
-                        is DockSlot.App -> viewModel.launch(slot.item.componentName)
-                        DockSlot.Empty -> Unit
-                    }
-                },
-                onRemove = { viewModel.removeFromDock(it) },
-                onReorder = { cn, index -> viewModel.moveDockItem(cn, index) },
+                loadIconBitmap = loadIconBitmap,
+                peekIconBitmap = peekIconBitmap,
+                resolveLabel = resolveLabel,
+                onSelect = onSelectDock,
+                onLaunch = onLaunchDock,
+                onRemove = onRemoveDock,
+                onReorder = onReorderDock,
             )
 
             NowPlayingCenter(
-                nowPlaying = np,
+                meta = nowPlayingMeta,
+                progress = viewModel.playbackProgress,
                 artworkBitmap = artworkBitmap,
                 diameter = state.settings.nowPlayingSizeDp.dp,
-                onOpenApp = { viewModel.openNowPlayingApp() },
-                onPlayPause = { viewModel.togglePlayPause() },
+                onOpenApp = onOpenNowPlaying,
+                onPlayPause = onPlayPause,
             )
         }
 
@@ -148,8 +189,8 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
             AppDrawer(
                 apps = state.apps,
                 settings = state.settings,
-                loadIconBitmap = { cn, custom, px -> viewModel.cachedIconBitmap(cn, custom, px) },
-                peekIconBitmap = { cn, custom, px -> viewModel.peekIconBitmap(cn, custom, px) },
+                loadIconBitmap = loadIconBitmap,
+                peekIconBitmap = peekIconBitmap,
                 onDismiss = { viewModel.closeDrawer() },
                 onOpenSettings = { viewModel.openSettings() },
                 onLaunch = {

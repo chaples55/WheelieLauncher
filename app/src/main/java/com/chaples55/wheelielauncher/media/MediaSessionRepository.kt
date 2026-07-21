@@ -12,14 +12,18 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import com.chaples55.wheelielauncher.data.ArtworkCache
+import com.chaples55.wheelielauncher.data.NowPlayingMeta
 import com.chaples55.wheelielauncher.data.NowPlayingState
+import com.chaples55.wheelielauncher.data.PlaybackProgress
+import com.chaples55.wheelielauncher.data.toMeta
+import com.chaples55.wheelielauncher.data.toProgress
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 class MediaSessionRepository(
     private val context: Context,
@@ -28,7 +32,15 @@ class MediaSessionRepository(
     private val mainHandler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val _state = MutableStateFlow(NowPlayingState())
+    /** Full snapshot; prefer [nowPlayingMeta] / [progress] in UI to avoid progress-driven recomposition. */
     val state: StateFlow<NowPlayingState> = _state.asStateFlow()
+
+    private val _meta = MutableStateFlow(NowPlayingMeta())
+    /** Art / title / session — does not emit on progress-only ticks. */
+    val nowPlayingMeta: StateFlow<NowPlayingMeta> = _meta.asStateFlow()
+
+    private val _progress = MutableStateFlow(PlaybackProgress())
+    val progress: StateFlow<PlaybackProgress> = _progress.asStateFlow()
 
     private var controller: MediaController? = null
     private var listening = false
@@ -68,7 +80,7 @@ class MediaSessionRepository(
             manager.addOnActiveSessionsChangedListener(sessionListener, listenerComponent, mainHandler)
             bindBestSession(manager.getActiveSessions(listenerComponent))
         } catch (_: SecurityException) {
-            _state.value = NowPlayingState()
+            clearAll()
         }
     }
 
@@ -89,7 +101,7 @@ class MediaSessionRepository(
         try {
             bindBestSession(manager.getActiveSessions(listenerComponent))
         } catch (_: SecurityException) {
-            _state.value = NowPlayingState()
+            clearAll()
         }
     }
 
@@ -100,15 +112,23 @@ class MediaSessionRepository(
     }
 
     fun openSessionApp() {
-        val pkg = controller?.packageName ?: _state.value.sourcePackage ?: return
+        val pkg = controller?.packageName ?: _meta.value.sourcePackage ?: return
         val launch = context.packageManager.getLaunchIntentForPackage(pkg) ?: return
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(launch)
     }
 
     fun currentArtworkBitmap(): Bitmap? {
-        val key = _state.value.artworkBitmapKey ?: return null
+        val key = _meta.value.artworkBitmapKey ?: return null
         return artworkCache.getArt(key)
+    }
+
+    private fun clearAll() {
+        lastArtKey = null
+        _state.value = NowPlayingState()
+        _meta.value = NowPlayingMeta()
+        _progress.value = PlaybackProgress()
+        mainHandler.removeCallbacks(progressTicker)
     }
 
     private fun bindBestSession(sessions: List<MediaController>?) {
@@ -128,20 +148,25 @@ class MediaSessionRepository(
     private fun publish(updatePositionOnly: Boolean = false) {
         val c = controller
         if (c == null) {
-            lastArtKey = null
-            _state.value = NowPlayingState()
-            mainHandler.removeCallbacks(progressTicker)
+            clearAll()
             return
         }
         val metadata = c.metadata
         val playback = c.playbackState
         val isPlaying = playback?.state == PlaybackState.STATE_PLAYING
         val position = playback?.position ?: 0L
+        val duration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
 
         if (updatePositionOnly) {
+            // Progress-only: do not touch meta / full state used by wallpaper + dock.
+            val next = PlaybackProgress(positionMs = position, durationMs = duration, isPlaying = isPlaying)
+            if (_progress.value != next) {
+                _progress.value = next
+            }
+            // Keep legacy state in sync for any leftover readers, but home UI should use meta/progress.
             val current = _state.value
             if (current.hasSession) {
-                _state.value = current.copy(positionMs = position, isPlaying = isPlaying)
+                _state.value = current.copy(positionMs = position, isPlaying = isPlaying, durationMs = duration)
             }
             mainHandler.removeCallbacks(progressTicker)
             if (isPlaying) {
@@ -169,17 +194,24 @@ class MediaSessionRepository(
             lastArtKey = artKey
         }
 
-        _state.value = NowPlayingState(
+        val full = NowPlayingState(
             title = title,
             artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST),
             artworkUri = artUri?.let { Uri.parse(it) },
             artworkBitmapKey = artKey,
             isPlaying = isPlaying,
             positionMs = position,
-            durationMs = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L,
+            durationMs = duration,
             hasSession = true,
             sourcePackage = c.packageName,
         )
+        _state.value = full
+        val nextMeta = full.toMeta()
+        if (_meta.value != nextMeta) {
+            _meta.value = nextMeta
+        }
+        _progress.value = full.toProgress()
+
         mainHandler.removeCallbacks(progressTicker)
         if (isPlaying) {
             mainHandler.post(progressTicker)

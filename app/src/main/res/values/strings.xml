@@ -14,6 +14,7 @@
     <string name="play">Play</string>
     <string name="pause">Pause</string>
     <string name="search_apps">Search apps</string>
+    <string name="clear_search">Clear search</string>
     <string name="show_drawer_search">Show search bar</string>
     <string name="search_icons">Search icons</string>
     <string name="from_icon_pack">From icon pack</string>
@@ -30,5 +31,6 @@
     <string name="onboarding_media_body">Allow notification access so Wheelie can show album art and playback controls from your music apps.</string>
     <string name="continue_label">Continue</string>
     <string name="skip">Skip</string>
+    <string name="back">Back</string>
     <string name="open_settings">Open settings</string>
 </resources>

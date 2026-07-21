@@ -235,7 +235,7 @@ class LauncherViewModel(private val container: AppContainer) : ViewModel() {
             val settings = uiState.value.settings
             val sizeDps = listOf(drawerSizeDp, dockSizeDp).distinct()
             for (dp in sizeDps) {
-                val sizePx = (dp * density).toInt().coerceIn(72, 256)
+                val sizePx = (dp * density).toInt().coerceIn(48, 256)
                 val loaders = apps.map { app ->
                     val custom = settings.customizations[app.componentName.key()]?.customIcon
                     val key = IconBitmapCache.key(app.componentName, custom, sizePx)

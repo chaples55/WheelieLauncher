@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:layout_marginHorizontal="12dp"
+    android:layout_marginVertical="4dp"
+    android:background="@drawable/drawer_search_bg"
+    android:paddingHorizontal="12dp"
+    android:paddingVertical="4dp">
+
+    <ImageView
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:contentDescription="@null"
+        android:src="@android:drawable/ic_menu_search"
+        android:tint="#B3FFFFFF" />
+
+    <EditText
+        android:id="@+id/drawer_search_input"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="10dp"
+        android:layout_weight="1"
+        android:background="@null"
+        android:hint="@string/search_apps"
+        android:imeOptions="actionSearch"
+        android:inputType="text"
+        android:maxLines="1"
+        android:paddingVertical="10dp"
+        android:textColor="#FFFFFFFF"
+        android:textColorHint="#73FFFFFF"
+        android:textSize="15sp" />
+
+    <ImageButton
+        android:id="@+id/drawer_search_clear"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="@drawable/ripple_borderless"
+        android:contentDescription="@string/clear_search"
+        android:src="@android:drawable/ic_menu_close_clear_cancel"
+        android:tint="#B3FFFFFF"
+        android:visibility="gone" />
+</LinearLayout>

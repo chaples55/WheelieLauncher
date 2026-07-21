@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.chaples55.wheelielauncher"
+    namespace = "com.acousticfish.wheelielauncher"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -12,7 +12,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.chaples55.wheelielauncher"
+        applicationId = "com.acousticfish.wheelielauncher"
         minSdk = 31
         targetSdk = 36
         versionCode = 1

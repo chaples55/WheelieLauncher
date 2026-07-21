@@ -26,6 +26,5 @@
         android:contentDescription="@string/settings"
         android:padding="12dp"
         android:scaleType="centerInside"
-        android:src="@android:drawable/ic_menu_preferences"
-        android:tint="#FFFFFFFF" />
+        android:src="@drawable/settings_24" />
 </LinearLayout>

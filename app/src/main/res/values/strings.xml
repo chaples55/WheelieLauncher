@@ -34,6 +34,26 @@
     <string name="swipe_up_open_drawer">Swipe up to open drawer</string>
     <string name="hide_drawer_button">Hide drawer button</string>
     <string name="launcher_settings">Launcher settings</string>
+    <string name="swipe_sensitivity">Swipe sensitivity</string>
+    <string name="show_clock">Show clock</string>
+    <string name="show_eq_button">Show EQ shortcut</string>
+    <string name="eq_target_app">EQ target app</string>
+    <string name="eq_shortcut">Equalizer</string>
+    <string name="show_skip_buttons">Show skip buttons</string>
+    <string name="skip_previous">Previous track</string>
+    <string name="skip_next">Next track</string>
+    <string name="not_set">Not set</string>
+    <string name="drawer_background_opacity">Drawer background opacity</string>
+    <string name="settings_home">Home</string>
+    <string name="settings_drawer">Drawer</string>
+    <string name="settings_general">General</string>
+    <string name="settings_system">System</string>
+    <string name="settings_about">About</string>
+    <string name="about_author">Author</string>
+    <string name="about_author_name">AcousticFish</string>
+    <string name="about_version">Version</string>
+    <string name="about_donation">Support Wheelie</string>
+    <string name="about_donation_subtitle">Donation link coming soon</string>
     <string name="back">Back</string>
     <string name="open_settings">Open settings</string>
 </resources>

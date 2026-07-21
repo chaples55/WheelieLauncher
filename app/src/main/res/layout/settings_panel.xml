@@ -20,10 +20,12 @@
             android:layout_height="48dp"
             android:background="@drawable/ripple_borderless"
             android:contentDescription="@string/back"
-            android:src="@android:drawable/ic_menu_revert"
-            android:tint="#FFFFFFFF" />
+            android:padding="12dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/arrow_back_24" />
 
         <TextView
+            android:id="@+id/settings_title"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"

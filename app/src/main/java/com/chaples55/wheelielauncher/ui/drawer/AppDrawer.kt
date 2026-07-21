@@ -2,11 +2,10 @@ package com.chaples55.wheelielauncher.ui.drawer
 
 import android.content.ComponentName
 import android.graphics.Bitmap
+import android.view.View
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
@@ -16,13 +15,15 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -38,14 +39,17 @@ import com.chaples55.wheelielauncher.data.AppCustomization
 import com.chaples55.wheelielauncher.data.LauncherApp
 import com.chaples55.wheelielauncher.data.key
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.withContext
 
-private const val DISMISS_DISTANCE_PX = 140f
-
+/**
+ * @param progressController shared Murine-style progress (0 closed … 1 open)
+ * @param visible intent from ViewModel; animated via [progressController]
+ */
 @Composable
 fun AppDrawerHost(
     visible: Boolean,
+    progressController: DrawerProgressController,
     apps: List<LauncherApp>,
     drawerColumns: Int,
     drawerIconSizeDp: Float,
@@ -63,87 +67,99 @@ fun AppDrawerHost(
     onAppInfo: (String) -> Unit,
     onChangeLabel: (ComponentName, String?) -> Unit,
     onChangeIcon: (ComponentName) -> Unit,
+    onProgressSettledClosed: () -> Unit,
+    onProgressSettledOpen: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Keep the Views drawer mounted after first open so reopen is instant.
     var mounted by remember { mutableStateOf(false) }
-    var panelHeightPx by remember { mutableFloatStateOf(0f) }
-    val slide = remember { Animatable(0f) }
-    var pullPx by remember { mutableFloatStateOf(0f) }
-    var pendingFlyIn by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
+    val progress = progressController.progress.value
     val onDismissUpdated = rememberUpdatedState(onDismiss)
 
-    LaunchedEffect(visible) {
-        if (visible) {
-            mounted = true
-            pendingFlyIn = true
-        }
+    // Mount as soon as we start opening so the first frame can track the finger.
+    LaunchedEffect(visible, progress) {
+        if (visible || progress > 0.001f) mounted = true
     }
 
-    LaunchedEffect(visible, panelHeightPx, pendingFlyIn) {
-        if (panelHeightPx <= 0f || !mounted) return@LaunchedEffect
-        if (visible) {
-            pullPx = 0f
-            if (pendingFlyIn) {
-                slide.snapTo(panelHeightPx)
-                pendingFlyIn = false
+    // Notify VM when settle completes (keeps drawerOpen in sync with animation).
+    LaunchedEffect(progressController) {
+        var lastBucket = -1
+        snapshotFlow { progressController.progress.value }
+            .distinctUntilChanged()
+            .collect { p ->
+                val bucket = when {
+                    p <= 0.001f -> 0
+                    p >= 0.999f -> 1
+                    else -> 2
+                }
+                if (bucket != lastBucket) {
+                    lastBucket = bucket
+                    when (bucket) {
+                        0 -> onProgressSettledClosed()
+                        1 -> onProgressSettledOpen()
+                    }
+                }
             }
-            slide.animateTo(0f, tween(300, easing = FastOutSlowInEasing))
-        } else {
-            pullPx = 0f
-            pendingFlyIn = false
-            slide.animateTo(panelHeightPx, tween(240, easing = FastOutSlowInEasing))
-        }
     }
 
     if (!mounted) return
+
+    val height = progressController.panelHeightPx
+    val translation = if (height > 0f) drawerTranslationY(progress, height) else 0f
+    val contentAlpha = DrawerProgressController.drawerContentAlpha(progress)
+    val interactive = progress > 0.02f
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .onSizeChanged { size ->
-                val h = size.height.toFloat()
-                if (h > 0f && kotlin.math.abs(panelHeightPx - h) > 1f) {
-                    val wasUnset = panelHeightPx == 0f
-                    panelHeightPx = h
-                    if (wasUnset && !visible) {
-                        scope.launch { slide.snapTo(h) }
-                    }
-                }
+                progressController.updatePanelHeight(size.height.toFloat())
             }
             .graphicsLayer {
-                translationY = slide.value + pullPx
+                translationY = translation
+                alpha = if (progress <= 0.001f) 0f else 1f
             },
     ) {
-        AppDrawer(
-            apps = apps,
-            drawerColumns = drawerColumns,
-            drawerIconSizeDp = drawerIconSizeDp,
-            drawerShowLabels = drawerShowLabels,
-            drawerShowSearch = drawerShowSearch,
-            customizations = customizations,
-            loadIconBitmap = loadIconBitmap,
-            peekIconBitmap = peekIconBitmap,
-            onDismiss = { onDismissUpdated.value() },
-            onOpenSettings = onOpenSettings,
-            onLaunch = onLaunch,
-            onAddToDock = onAddToDock,
-            onHide = onHide,
-            onUninstall = onUninstall,
-            onAppInfo = onAppInfo,
-            onChangeLabel = onChangeLabel,
-            onChangeIcon = onChangeIcon,
-            onPullChanged = { pullPx = it },
-            onPullEnd = { amount, _ ->
-                if (amount >= DISMISS_DISTANCE_PX / 2f) {
-                    onDismissUpdated.value()
-                } else {
-                    pullPx = 0f
-                }
-            },
-            resetPullToken = visible,
-        )
+        // Scrim is drawn under the sheet content by LauncherRoot; sheet itself fades in.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { alpha = contentAlpha.coerceAtLeast(0.001f) },
+        ) {
+            AppDrawer(
+                apps = apps,
+                drawerColumns = drawerColumns,
+                drawerIconSizeDp = drawerIconSizeDp,
+                drawerShowLabels = drawerShowLabels,
+                drawerShowSearch = drawerShowSearch,
+                customizations = customizations,
+                loadIconBitmap = loadIconBitmap,
+                peekIconBitmap = peekIconBitmap,
+                touchEnabled = interactive,
+                onDismiss = { onDismissUpdated.value() },
+                onOpenSettings = onOpenSettings,
+                onLaunch = onLaunch,
+                onAddToDock = onAddToDock,
+                onHide = onHide,
+                onUninstall = onUninstall,
+                onAppInfo = onAppInfo,
+                onChangeLabel = onChangeLabel,
+                onChangeIcon = onChangeIcon,
+                onPullChanged = { pullPx ->
+                    val h = progressController.panelHeightPx.coerceAtLeast(1f)
+                    progressController.dragTo(1f - (pullPx / h))
+                },
+                onPullEnd = { pullPx, velocityY ->
+                    val h = progressController.panelHeightPx.coerceAtLeast(1f)
+                    val at = (1f - pullPx / h).coerceIn(0f, 1f)
+                    progressController.settleFromGesture(
+                        atProgress = at,
+                        velocityYpxPerMs = velocityY,
+                        wasOpening = false,
+                    )
+                },
+                resetPullToken = progress > 0.95f,
+            )
+        }
     }
 }
 
@@ -169,9 +185,10 @@ fun AppDrawer(
     onPullChanged: (Float) -> Unit,
     onPullEnd: (Float, Float) -> Unit,
     resetPullToken: Boolean,
+    touchEnabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    BackHandler(onBack = onDismiss)
+    BackHandler(enabled = touchEnabled, onBack = onDismiss)
     var renameApp by remember { mutableStateOf<LauncherApp?>(null) }
     var renameText by remember { mutableStateOf("") }
     var query by remember { mutableStateOf("") }
@@ -247,6 +264,7 @@ fun AppDrawer(
 
     val onPullChangedState = rememberUpdatedState(onPullChanged)
     val onPullEndState = rememberUpdatedState(onPullEnd)
+    val touchEnabledState = rememberUpdatedState(touchEnabled)
 
     LaunchedEffect(onLaunch, onAddToDock, onChangeIcon, onAppInfo, onHide, onUninstall, onOpenSettings) {
         adapter.onLaunch = onLaunch
@@ -315,14 +333,13 @@ fun AppDrawer(
             if (rv.adapter !== adapter) rv.adapter = adapter
             rv.onPullChanged = { onPullChangedState.value(it) }
             rv.onPullEnd = { amount, velocity ->
-                if (amount > 0f && amount < DISMISS_DISTANCE_PX / 2f) {
-                    rv.resetPull()
-                }
                 onPullEndState.value(amount, velocity)
-            }
-            if (!resetPullToken) {
                 rv.resetPull()
             }
+            // GONE while closed so the mounted RV cannot steal home-screen swipes.
+            val enable = touchEnabledState.value
+            rv.visibility = if (enable) View.VISIBLE else View.GONE
+            rv.isEnabled = enable
         },
         modifier = modifier.fillMaxSize(),
     )

@@ -71,6 +71,7 @@ fun CircularDock(
     iconSizeDp: Float,
     ringRadiusFraction: Float,
     showLabels: Boolean,
+    showDrawerButton: Boolean = true,
     loadIconBitmap: suspend (ComponentName, String?, Int) -> Bitmap?,
     peekIconBitmap: (ComponentName, String?, Int) -> Bitmap? = { _, _, _ -> null },
     resolveLabel: (DockItem) -> String,
@@ -88,8 +89,8 @@ fun CircularDock(
     var menuFor by remember { mutableStateOf<ComponentName?>(null) }
     val dragState = remember { DockDragState() }
 
-    val placements = remember(dockItems, slotCount) {
-        computeFixedPlacements(dockItems, slotCount)
+    val placements = remember(dockItems, slotCount, showDrawerButton) {
+        computeFixedPlacements(dockItems, slotCount, showDrawerButton)
     }
 
     Box(
@@ -300,8 +301,24 @@ private data class Placement(
     val slot: DockSlot,
 )
 
-/** Fixed ring positions. Drawer always at bottom (90°). Icons do not rotate. */
-private fun computeFixedPlacements(dockItems: List<DockItem>, slotCount: Int): List<Placement> {
+/** Fixed ring positions. When [includeDrawer] is true, drawer sits at bottom (90°). */
+private fun computeFixedPlacements(
+    dockItems: List<DockItem>,
+    slotCount: Int,
+    includeDrawer: Boolean,
+): List<Placement> {
+    if (!includeDrawer) {
+        if (dockItems.isEmpty()) return emptyList()
+        val n = dockItems.size
+        val step = 360f / n
+        return List(n) { index ->
+            Placement(
+                slotIndex = index,
+                angleDegrees = 90f + index * step,
+                slot = DockSlot.App(dockItems[index], index),
+            )
+        }
+    }
     val count = slotCount.coerceAtLeast(1)
     val step = 360f / count
     return List(count) { index ->
@@ -327,7 +344,13 @@ private fun nearestAppSlotIndex(
         ?: return null
     return when (val slot = best.slot) {
         is DockSlot.App -> slot.appIndex
-        is DockSlot.Empty -> (best.slotIndex - 1).coerceIn(0, appCount - 1)
+        is DockSlot.Empty -> {
+            // Empty slots exist only when the drawer button is shown.
+            val appSlotIndex = placements.indexOfFirst { it.slot is DockSlot.Empty }.let {
+                (best.slotIndex - 1).coerceIn(0, appCount - 1)
+            }
+            appSlotIndex
+        }
         else -> null
     }
 }

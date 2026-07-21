@@ -36,6 +36,8 @@ class SettingsRepository(private val context: Context) {
         val onboardingMedia = booleanPreferencesKey("onboarding_media")
         val nowPlayingSize = floatPreferencesKey("now_playing_size")
         val dockRingRadius = floatPreferencesKey("dock_ring_radius")
+        val swipeUpToOpenDrawer = booleanPreferencesKey("swipe_up_open_drawer")
+        val hideDrawerButton = booleanPreferencesKey("hide_drawer_button")
     }
 
     val settings: Flow<LauncherSettings> = context.dataStore.data.map { prefs ->
@@ -57,6 +59,8 @@ class SettingsRepository(private val context: Context) {
             onboardingMediaDone = prefs[Keys.onboardingMedia] ?: false,
             nowPlayingSizeDp = prefs[Keys.nowPlayingSize] ?: 120f,
             dockRingRadiusFraction = prefs[Keys.dockRingRadius] ?: 0.78f,
+            swipeUpToOpenDrawer = prefs[Keys.swipeUpToOpenDrawer] ?: false,
+            hideDrawerButton = prefs[Keys.hideDrawerButton] ?: false,
         )
     }
 
@@ -100,6 +104,13 @@ class SettingsRepository(private val context: Context) {
     suspend fun setOnboardingMediaDone(value: Boolean) = edit { it[Keys.onboardingMedia] = value }
     suspend fun setNowPlayingSize(value: Float) = edit { it[Keys.nowPlayingSize] = value.coerceIn(72f, 220f) }
     suspend fun setDockRingRadius(value: Float) = edit { it[Keys.dockRingRadius] = value.coerceIn(0.45f, 0.92f) }
+    suspend fun setSwipeUpToOpenDrawer(value: Boolean) = edit {
+        it[Keys.swipeUpToOpenDrawer] = value
+        if (!value) it[Keys.hideDrawerButton] = false
+    }
+    suspend fun setHideDrawerButton(value: Boolean) = edit {
+        it[Keys.hideDrawerButton] = value
+    }
 
     private suspend fun edit(block: suspend (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         context.dataStore.edit(block)

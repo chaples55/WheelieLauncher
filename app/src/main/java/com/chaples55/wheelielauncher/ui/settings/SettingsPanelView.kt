@@ -48,6 +48,9 @@ class SettingsPanelView @JvmOverloads constructor(
     private var dockLabelsSwitch: Switch? = null
     private var drawerLabelsSwitch: Switch? = null
     private var drawerSearchSwitch: Switch? = null
+    private var swipeUpSwitch: Switch? = null
+    private var hideDrawerButtonSwitch: Switch? = null
+    private var hideDrawerButtonRow: android.view.View? = null
     private var statusBarSwitch: Switch? = null
     private var dockIconLabel: TextView? = null
     private var dockRingLabel: TextView? = null
@@ -104,14 +107,14 @@ class SettingsPanelView @JvmOverloads constructor(
             content.addView(tv)
         }
 
-        fun switchRow(label: String, checked: Boolean, onChecked: (Boolean) -> Unit): Switch {
+        fun switchRow(label: String, checked: Boolean, onChecked: (Boolean) -> Unit): Pair<android.view.View, Switch> {
             val row = inflater.inflate(R.layout.settings_switch_row, content, false)
             row.findViewById<TextView>(R.id.settings_switch_label).text = label
             val sw = row.findViewById<Switch>(R.id.settings_switch)
             sw.isChecked = checked
             sw.setOnCheckedChangeListener { _, isChecked -> onChecked(isChecked) }
             content.addView(row)
-            return sw
+            return row to sw
         }
 
         fun sliderRow(
@@ -171,7 +174,7 @@ class SettingsPanelView @JvmOverloads constructor(
         section("Dock")
         dockLabelsSwitch = switchRow("Show dock labels", settings.dockShowLabels) {
             host?.onUpdate { repo -> repo.setDockShowLabels(it) }
-        }
+        }.second
         dockIconLabel = sliderRow(
             initialLabel = "Dock icon size",
             value = dockIconSize,
@@ -215,10 +218,19 @@ class SettingsPanelView @JvmOverloads constructor(
         section("Drawer")
         drawerLabelsSwitch = switchRow("Show drawer labels", settings.drawerShowLabels) {
             host?.onUpdate { repo -> repo.setDrawerShowLabels(it) }
-        }
+        }.second
         drawerSearchSwitch = switchRow(context.getString(R.string.show_drawer_search), settings.drawerShowSearch) {
             host?.onUpdate { repo -> repo.setDrawerShowSearch(it) }
+        }.second
+        swipeUpSwitch = switchRow(context.getString(R.string.swipe_up_open_drawer), settings.swipeUpToOpenDrawer) {
+            host?.onUpdate { repo -> repo.setSwipeUpToOpenDrawer(it) }
+        }.second
+        val hidePair = switchRow(context.getString(R.string.hide_drawer_button), settings.hideDrawerButton) {
+            host?.onUpdate { repo -> repo.setHideDrawerButton(it) }
         }
+        hideDrawerButtonRow = hidePair.first
+        hideDrawerButtonSwitch = hidePair.second
+        hideDrawerButtonRow?.visibility = if (settings.swipeUpToOpenDrawer) VISIBLE else GONE
         drawerColsLabel = sliderRow(
             initialLabel = "Drawer columns ($drawerColumns)",
             value = drawerColumns.toFloat(),
@@ -252,7 +264,7 @@ class SettingsPanelView @JvmOverloads constructor(
         section("Appearance")
         statusBarSwitch = switchRow("Show status bar", settings.showStatusBar) {
             host?.onUpdate { repo -> repo.setShowStatusBar(it) }
-        }
+        }.second
         scrimLabel = sliderRow(
             initialLabel = "Status bar scrim (${(statusScrim * 100).toInt()}%)",
             value = statusScrim,
@@ -299,6 +311,9 @@ class SettingsPanelView @JvmOverloads constructor(
         dockLabelsSwitch?.isChecked = settings.dockShowLabels
         drawerLabelsSwitch?.isChecked = settings.drawerShowLabels
         drawerSearchSwitch?.isChecked = settings.drawerShowSearch
+        swipeUpSwitch?.isChecked = settings.swipeUpToOpenDrawer
+        hideDrawerButtonSwitch?.isChecked = settings.hideDrawerButton
+        hideDrawerButtonRow?.visibility = if (settings.swipeUpToOpenDrawer) VISIBLE else GONE
         statusBarSwitch?.isChecked = settings.showStatusBar
         dockIconLabel?.text = "Dock icon size (${dockIconSize.toInt()} dp)"
         dockRingLabel?.text = "Icon ring size (${(dockRing * 100).toInt()}%)"

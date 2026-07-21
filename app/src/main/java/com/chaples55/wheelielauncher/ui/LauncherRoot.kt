@@ -10,24 +10,34 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chaples55.wheelielauncher.R
@@ -36,16 +46,21 @@ import com.chaples55.wheelielauncher.data.AppCustomization
 import com.chaples55.wheelielauncher.data.DockItem
 import com.chaples55.wheelielauncher.data.key
 import com.chaples55.wheelielauncher.ui.drawer.AppDrawerHost
+import com.chaples55.wheelielauncher.ui.drawer.DrawerProgressController
 import com.chaples55.wheelielauncher.ui.home.CircularDock
 import com.chaples55.wheelielauncher.ui.home.DockSlot
 import com.chaples55.wheelielauncher.ui.home.NowPlayingCenter
 import com.chaples55.wheelielauncher.ui.home.WallpaperBackground
+import com.chaples55.wheelielauncher.ui.home.homeBackgroundLongPress
+import com.chaples55.wheelielauncher.ui.home.homeVerticalGestures
 import com.chaples55.wheelielauncher.ui.home.wallpaperArtKey
 import com.chaples55.wheelielauncher.ui.icons.IconPickerScreen
 import com.chaples55.wheelielauncher.ui.settings.HiddenAppsScreen
 import com.chaples55.wheelielauncher.ui.settings.SettingsScreen
+import com.chaples55.wheelielauncher.util.handleHomeSwipeDown
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 @Composable
 fun LauncherRoot(viewModel: LauncherViewModel) {
@@ -57,6 +72,14 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
     var iconPickerFor by remember { mutableStateOf<ComponentName?>(null) }
     var showHidden by remember { mutableStateOf(false) }
     var packageLabels by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    val scope = rememberCoroutineScope()
+    val drawerProgress = remember { DrawerProgressController(scope) }
+    val drawerP = drawerProgress.progress.value
+
+    val swipeUpEnabled = state.settings.swipeUpToOpenDrawer
+    val showDrawerButton = !(swipeUpEnabled && state.settings.hideDrawerButton)
+    val overlaysBlockingHome =
+        state.settingsOpen || iconPickerFor != null || showHidden || state.showOnboardingHome || state.showOnboardingMedia
 
     LaunchedEffect(density) {
         viewModel.setIconDensity(density)
@@ -75,7 +98,7 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
         }
     }
 
-    val slotCount = LauncherViewModel.slotCountFor(state.dockItems.size)
+    val slotCount = LauncherViewModel.slotCountFor(state.dockItems.size, includeDrawer = showDrawerButton)
     val artKey = remember(
         nowPlayingMeta.hasSession,
         nowPlayingMeta.artworkBitmapKey,
@@ -101,10 +124,13 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
         { cn, custom, px -> viewModel.peekIconBitmap(cn, custom, px) }
     }
     val onSelectDock = remember(viewModel) { { index: Int -> viewModel.setSelectedDockIndex(index) } }
-    val onLaunchDock = remember(viewModel) {
+    val onLaunchDock = remember(viewModel, drawerProgress) {
         { slot: DockSlot ->
             when (slot) {
-                DockSlot.Drawer -> viewModel.openDrawer()
+                DockSlot.Drawer -> {
+                    viewModel.openDrawer()
+                    drawerProgress.animateOpen()
+                }
                 is DockSlot.App -> viewModel.launch(slot.item.componentName)
                 DockSlot.Empty -> Unit
             }
@@ -130,7 +156,67 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    val homeScale = DrawerProgressController.homeScale(drawerP)
+    val homeAlpha = DrawerProgressController.homeAlpha(drawerP)
+    val scrimAlpha = DrawerProgressController.scrimAlpha(drawerP)
+
+    var homeDragAccum by remember { mutableFloatStateOf(0f) }
+    var homeDragProgress by remember { mutableFloatStateOf(0f) }
+    var homeMenuAt by remember { mutableStateOf<Offset?>(null) }
+    val showStatusBar = state.settings.showStatusBar
+    val homeGesturesEnabled = !overlaysBlockingHome
+    val notificationAction = rememberUpdatedState {
+        handleHomeSwipeDown(
+            context = context,
+            statusBarPreferredVisible = showStatusBar,
+        )
+    }
+    // Gestures live on the home layer (under the drawer) so an open drawer keeps pull-to-dismiss.
+    val homeGestureModifier = Modifier
+        .homeVerticalGestures(
+            enabled = homeGesturesEnabled,
+            swipeUpToOpenDrawer = swipeUpEnabled,
+            isDrawerClosed = { drawerProgress.progress.value <= 0.001f },
+            onNotificationSwipeDown = { notificationAction.value() },
+            onDrawerDragStart = {
+                homeDragAccum = 0f
+                homeDragProgress = drawerProgress.progress.value
+            },
+            onDrawerDrag = { _, dragAmount ->
+                homeDragAccum += -dragAmount
+                val h = drawerProgress.panelHeightPx.coerceAtLeast(1f)
+                homeDragProgress = (homeDragProgress + (-dragAmount) / h).coerceIn(0f, 1f)
+                drawerProgress.dragTo(homeDragProgress)
+            },
+            onDrawerDragEnd = {
+                val opening = homeDragAccum > 0f || homeDragProgress < 0.5f
+                drawerProgress.settleFromGesture(
+                    atProgress = homeDragProgress,
+                    velocityYpxPerMs = 0f,
+                    wasOpening = opening,
+                )
+                homeDragAccum = 0f
+            },
+            onDrawerDragCancel = {
+                drawerProgress.settleFromGesture(
+                    atProgress = homeDragProgress,
+                    velocityYpxPerMs = 0f,
+                    wasOpening = homeDragProgress < 0.5f,
+                )
+                homeDragAccum = 0f
+            },
+        )
+        .homeBackgroundLongPress(enabled = homeGesturesEnabled) { pos ->
+            homeMenuAt = pos
+        }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onSizeChanged { size ->
+                drawerProgress.updatePanelHeight(size.height.toFloat())
+            },
+    ) {
         WallpaperBackground(
             artKey = artKey,
             isMediaArt = nowPlayingMeta.hasSession && artKey.startsWith("media:"),
@@ -142,7 +228,7 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
             ensureBlurred = ensureBlurred,
         )
 
-        if (state.settings.showStatusBar) {
+        if (showStatusBar) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -154,18 +240,23 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .then(
-                    if (state.settings.showStatusBar) Modifier.statusBarsPadding() else Modifier,
-                ),
+                .then(if (showStatusBar) Modifier.statusBarsPadding() else Modifier)
+                .graphicsLayer {
+                    scaleX = homeScale
+                    scaleY = homeScale
+                    alpha = homeAlpha.coerceAtLeast(0.001f)
+                }
+                .then(homeGestureModifier),
             contentAlignment = Alignment.Center,
         ) {
             CircularDock(
                 dockItems = state.dockItems,
-                slotCount = slotCount,
+                slotCount = slotCount.coerceAtLeast(1),
                 selectedIndex = state.selectedDockIndex.coerceIn(0, (slotCount - 1).coerceAtLeast(0)),
                 iconSizeDp = state.settings.dockIconSizeDp,
                 ringRadiusFraction = state.settings.dockRingRadiusFraction,
                 showLabels = state.settings.dockShowLabels,
+                showDrawerButton = showDrawerButton,
                 loadIconBitmap = loadIconBitmap,
                 peekIconBitmap = peekIconBitmap,
                 resolveLabel = resolveLabel,
@@ -183,10 +274,48 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
                 onOpenApp = onOpenNowPlaying,
                 onPlayPause = onPlayPause,
             )
+
+            homeMenuAt?.let { anchor ->
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .offset { IntOffset(anchor.x.roundToInt(), anchor.y.roundToInt()) },
+                ) {
+                    DropdownMenu(
+                        expanded = true,
+                        onDismissRequest = { homeMenuAt = null },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.launcher_settings)) },
+                            onClick = {
+                                homeMenuAt = null
+                                viewModel.openSettings()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.app_drawer)) },
+                            onClick = {
+                                homeMenuAt = null
+                                viewModel.openDrawer()
+                                drawerProgress.animateOpen()
+                            },
+                        )
+                    }
+                }
+            }
+        }
+
+        if (scrimAlpha > 0.01f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = scrimAlpha)),
+            )
         }
 
         AppDrawerHost(
-            visible = state.drawerOpen && !state.settingsOpen && iconPickerFor == null && !showHidden,
+            visible = state.drawerOpen && !overlaysBlockingHome,
+            progressController = drawerProgress,
             apps = state.apps,
             drawerColumns = state.settings.drawerColumns,
             drawerIconSizeDp = state.settings.drawerIconSizeDp,
@@ -195,10 +324,14 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
             customizations = state.settings.customizations,
             loadIconBitmap = loadIconBitmap,
             peekIconBitmap = peekIconBitmap,
-            onDismiss = { viewModel.closeDrawer() },
+            onDismiss = {
+                viewModel.closeDrawer()
+                drawerProgress.animateClose()
+            },
             onOpenSettings = { viewModel.openSettings() },
             onLaunch = {
                 viewModel.closeDrawer()
+                drawerProgress.animateClose()
                 viewModel.launch(it)
             },
             onAddToDock = { cn ->
@@ -217,6 +350,8 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
                 )
             },
             onChangeIcon = { iconPickerFor = it },
+            onProgressSettledClosed = { viewModel.closeDrawer() },
+            onProgressSettledOpen = { viewModel.openDrawer() },
         )
 
         if (state.settingsOpen && iconPickerFor == null && !showHidden) {

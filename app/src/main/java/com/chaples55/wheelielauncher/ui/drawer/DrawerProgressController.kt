@@ -1,0 +1,145 @@
+package com.chaples55.wheelielauncher.ui.drawer
+
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.max
+
+/**
+ * Drawer sheet progress:
+ * - 0 = closed (home)
+ * - 1 = open (drawer fully up)
+ * Finger tracks progress directly; settle uses a short symmetric distance threshold.
+ */
+@Stable
+class DrawerProgressController(
+    private val scope: CoroutineScope,
+) {
+    val progress = Animatable(0f)
+    var panelHeightPx by mutableFloatStateOf(0f)
+        private set
+
+    private var settleJob: Job? = null
+
+    fun updatePanelHeight(height: Float) {
+        if (height <= 0f) return
+        panelHeightPx = height
+    }
+
+    fun snapProgress(value: Float) {
+        settleJob?.cancel()
+        settleJob = scope.launch { progress.snapTo(value.coerceIn(0f, 1f)) }
+    }
+
+    fun animateOpen() {
+        settleJob?.cancel()
+        settleJob = scope.launch {
+            progress.animateTo(1f, tween(OPEN_DURATION_MS, easing = ATOMIC_EASING))
+        }
+    }
+
+    fun animateClose() {
+        settleJob?.cancel()
+        settleJob = scope.launch {
+            progress.animateTo(0f, tween(CLOSE_DURATION_MS, easing = ATOMIC_EASING))
+        }
+    }
+
+    /** While the user is dragging, set progress immediately (no tween). */
+    fun dragTo(value: Float) {
+        settleJob?.cancel()
+        settleJob = scope.launch {
+            progress.snapTo(value.coerceIn(0f, 1f))
+        }
+    }
+
+    /**
+     * Settle after a gesture.
+     * @param atProgress finger position to settle from (avoids racing async [dragTo])
+     * @param velocityYpxPerMs positive = finger moving down
+     * @param wasOpening true if the gesture was toward open
+     */
+    fun settleFromGesture(
+        atProgress: Float,
+        velocityYpxPerMs: Float,
+        wasOpening: Boolean,
+    ) {
+        settleJob?.cancel()
+        val p = atProgress.coerceIn(0f, 1f)
+        val fling = abs(velocityYpxPerMs) > FLING_VELOCITY_PX_MS
+        val target = when {
+            fling && velocityYpxPerMs < 0f -> 1f
+            fling && velocityYpxPerMs > 0f -> 0f
+            wasOpening -> if (p >= COMMIT_DISTANCE) 1f else 0f
+            else -> if ((1f - p) >= COMMIT_DISTANCE) 0f else 1f
+        }
+        val distance = abs(target - p)
+        val duration = settleDurationMs(velocityYpxPerMs, distance)
+        settleJob = scope.launch {
+            // Snap to the finger position first so settle never jumps backward.
+            progress.snapTo(p)
+            if (distance < 0.001f) return@launch
+            progress.animateTo(
+                target,
+                tween(
+                    durationMillis = duration,
+                    easing = if (fling) LinearEasing else ATOMIC_EASING,
+                ),
+            )
+        }
+    }
+
+    companion object {
+        /** Fraction of panel height required to commit open or close (half of prior 0.4). */
+        const val COMMIT_DISTANCE = 0.2f
+        const val OPEN_DURATION_MS = 560
+        const val CLOSE_DURATION_MS = 300
+        const val FLING_VELOCITY_PX_MS = 0.8f
+        const val WORKSPACE_SCALE_OPEN = 0.97f
+        val ATOMIC_EASING = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)
+
+        private fun settleDurationMs(velocityYpxPerMs: Float, progressNeeded: Float): Int {
+            val v = max(2f, abs(velocityYpxPerMs) * 0.5f)
+            val needed = max(0.15f, progressNeeded)
+            return max(100, (1200f / v * needed).toInt()).coerceAtMost(900)
+        }
+
+        fun earlyProgress(p: Float): Float = (p / COMMIT_DISTANCE).coerceIn(0f, 1f)
+
+        fun homeScale(p: Float): Float {
+            val t = earlyProgress(p)
+            return 1f + (WORKSPACE_SCALE_OPEN - 1f) * t
+        }
+
+        fun homeAlpha(p: Float): Float = 1f - earlyProgress(p)
+
+        fun scrimAlpha(p: Float): Float {
+            val start = 0.06f
+            val end = COMMIT_DISTANCE
+            return when {
+                p <= start -> 0f
+                p >= end -> 0.55f
+                else -> ((p - start) / (end - start)) * 0.55f
+            }
+        }
+
+        /** Keep sheet content visible while closing; only fade during early open. */
+        fun drawerContentAlpha(p: Float): Float = when {
+            p <= 0.02f -> 0f
+            p >= COMMIT_DISTANCE -> 1f
+            else -> (p / COMMIT_DISTANCE).coerceIn(0f, 1f)
+        }
+    }
+}
+
+fun drawerTranslationY(progress: Float, heightPx: Float): Float =
+    (1f - progress.coerceIn(0f, 1f)) * heightPx

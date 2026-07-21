@@ -316,8 +316,12 @@ class LauncherViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     companion object {
-        fun slotCountFor(appCount: Int): Int =
-            (appCount + 1).coerceIn(DockRepository.MIN_SLOTS, DockRepository.MAX_DOCK_SLOTS)
+        fun slotCountFor(appCount: Int, includeDrawer: Boolean = true): Int =
+            if (includeDrawer) {
+                (appCount + 1).coerceIn(DockRepository.MIN_SLOTS, DockRepository.MAX_DOCK_SLOTS)
+            } else {
+                appCount.coerceIn(0, DockRepository.MAX_APPS)
+            }
     }
 }
 

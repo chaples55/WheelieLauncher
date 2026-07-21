@@ -31,6 +31,9 @@
     <string name="onboarding_media_body">Allow notification access so Wheelie can show album art and playback controls from your music apps.</string>
     <string name="continue_label">Continue</string>
     <string name="skip">Skip</string>
+    <string name="swipe_up_open_drawer">Swipe up to open drawer</string>
+    <string name="hide_drawer_button">Hide drawer button</string>
+    <string name="launcher_settings">Launcher settings</string>
     <string name="back">Back</string>
     <string name="open_settings">Open settings</string>
 </resources>

@@ -275,6 +275,8 @@ class DrawerAppsAdapter(
 
 /**
  * RecyclerView that reports downward overscroll at the top so the drawer can dismiss.
+ * [onPullChanged] receives pull distance in px; [onPullEnd] receives (pullPx, velocityY px/ms).
+ * Positive velocityY = finger moving down.
  */
 class PullDismissRecyclerView @JvmOverloads constructor(
     context: android.content.Context,
@@ -283,31 +285,42 @@ class PullDismissRecyclerView @JvmOverloads constructor(
     var pullOffsetPx: Float = 0f
         private set
     var onPullChanged: ((Float) -> Unit)? = null
-    var onPullEnd: ((Float, Float) -> Unit)? = null // amount, velocityY
+    var onPullEnd: ((Float, Float) -> Unit)? = null
 
     private var trackingPull = false
     private var lastY = 0f
-    private var velocityTrackerY = 0f
+    private var velocityTracker: android.view.VelocityTracker? = null
 
     fun resetPull() {
-        if (pullOffsetPx != 0f) {
-            pullOffsetPx = 0f
-            onPullChanged?.invoke(0f)
-        }
+        // Do not notify listeners — that would snap drawer progress back to open.
+        pullOffsetPx = 0f
         trackingPull = false
+        recycleVelocityTracker()
+    }
+
+    private fun ensureVelocityTracker() {
+        if (velocityTracker == null) velocityTracker = android.view.VelocityTracker.obtain()
+    }
+
+    private fun recycleVelocityTracker() {
+        velocityTracker?.recycle()
+        velocityTracker = null
     }
 
     override fun onInterceptTouchEvent(e: MotionEvent): Boolean {
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 lastY = e.y
-                velocityTrackerY = 0f
+                ensureVelocityTracker()
+                velocityTracker?.clear()
+                velocityTracker?.addMovement(e)
                 if (pullOffsetPx > 0f) {
                     trackingPull = true
                     return true
                 }
             }
             MotionEvent.ACTION_MOVE -> {
+                velocityTracker?.addMovement(e)
                 val dy = e.y - lastY
                 if (!trackingPull && !canScrollVertically(-1) && dy > 0f && abs(dy) > 4f) {
                     trackingPull = true
@@ -320,12 +333,13 @@ class PullDismissRecyclerView @JvmOverloads constructor(
     }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
+        ensureVelocityTracker()
+        velocityTracker?.addMovement(e)
         when (e.actionMasked) {
             MotionEvent.ACTION_MOVE -> {
                 if (trackingPull || pullOffsetPx > 0f) {
                     val dy = e.y - lastY
                     lastY = e.y
-                    velocityTrackerY = dy
                     if (!canScrollVertically(-1) || pullOffsetPx > 0f) {
                         trackingPull = true
                         pullOffsetPx = (pullOffsetPx + dy).coerceAtLeast(0f)
@@ -336,11 +350,15 @@ class PullDismissRecyclerView @JvmOverloads constructor(
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 if (trackingPull || pullOffsetPx > 0f) {
-                    onPullEnd?.invoke(pullOffsetPx, velocityTrackerY)
+                    velocityTracker?.computeCurrentVelocity(1000) // px/s
+                    val vyPxPerMs = (velocityTracker?.yVelocity ?: 0f) / 1000f
+                    onPullEnd?.invoke(pullOffsetPx, vyPxPerMs)
                     trackingPull = false
                     lastY = e.y
+                    recycleVelocityTracker()
                     return true
                 }
+                recycleVelocityTracker()
             }
         }
         lastY = e.y

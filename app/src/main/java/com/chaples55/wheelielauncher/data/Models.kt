@@ -42,6 +42,10 @@ data class LauncherSettings(
     val nowPlayingSizeDp: Float = 120f,
     /** Ring radius as a fraction of the shorter screen half (0.45–0.92). */
     val dockRingRadiusFraction: Float = 0.78f,
+    /** Swipe up on the home screen opens the app drawer (Murine-style). */
+    val swipeUpToOpenDrawer: Boolean = false,
+    /** Hide the dock drawer button; only applies when [swipeUpToOpenDrawer] is true. */
+    val hideDrawerButton: Boolean = false,
 )
 
 data class NowPlayingState(

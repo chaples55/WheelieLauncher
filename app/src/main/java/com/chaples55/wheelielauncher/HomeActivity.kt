@@ -57,6 +57,8 @@ class HomeActivity : ComponentActivity() {
         super.onResume()
         viewModel.refreshMedia()
         viewModel.refreshApps()
+        // Re-apply so a temporary peek does not stick after leaving the shade / app.
+        lastStatusBarVisible?.let { applyStatusBarVisibility(it) }
     }
 
     private fun applyStatusBarVisibility(show: Boolean) {

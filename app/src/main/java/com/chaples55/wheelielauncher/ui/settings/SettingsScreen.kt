@@ -117,6 +117,9 @@ fun SettingsScreen(
             SwitchRow("Show drawer labels", settings.drawerShowLabels) {
                 onUpdate { repo -> repo.setDrawerShowLabels(it) }
             }
+            SwitchRow(stringResource(R.string.show_drawer_search), settings.drawerShowSearch) {
+                onUpdate { repo -> repo.setDrawerShowSearch(it) }
+            }
             SliderRow(
                 label = "Drawer columns (${settings.drawerColumns})",
                 value = settings.drawerColumns.toFloat(),

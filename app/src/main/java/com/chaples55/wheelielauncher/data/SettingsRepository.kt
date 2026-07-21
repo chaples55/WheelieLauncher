@@ -23,6 +23,7 @@ class SettingsRepository(private val context: Context) {
         val dockIconSize = floatPreferencesKey("dock_icon_size")
         val drawerIconSize = floatPreferencesKey("drawer_icon_size")
         val drawerColumns = intPreferencesKey("drawer_columns")
+        val drawerShowSearch = booleanPreferencesKey("drawer_show_search")
         val showStatusBar = booleanPreferencesKey("show_status_bar")
         val statusBarScrim = floatPreferencesKey("status_bar_scrim")
         val wallpaperUri = stringPreferencesKey("wallpaper_uri")
@@ -44,6 +45,7 @@ class SettingsRepository(private val context: Context) {
             dockIconSizeDp = prefs[Keys.dockIconSize] ?: 48f,
             drawerIconSizeDp = prefs[Keys.drawerIconSize] ?: 48f,
             drawerColumns = prefs[Keys.drawerColumns] ?: 4,
+            drawerShowSearch = prefs[Keys.drawerShowSearch] ?: true,
             showStatusBar = prefs[Keys.showStatusBar] ?: true,
             statusBarScrimOpacity = prefs[Keys.statusBarScrim] ?: 0.4f,
             defaultWallpaperUri = prefs[Keys.wallpaperUri],
@@ -65,6 +67,7 @@ class SettingsRepository(private val context: Context) {
     suspend fun setDockIconSize(value: Float) = edit { it[Keys.dockIconSize] = value }
     suspend fun setDrawerIconSize(value: Float) = edit { it[Keys.drawerIconSize] = value }
     suspend fun setDrawerColumns(value: Int) = edit { it[Keys.drawerColumns] = value.coerceIn(2, 6) }
+    suspend fun setDrawerShowSearch(value: Boolean) = edit { it[Keys.drawerShowSearch] = value }
     suspend fun setShowStatusBar(value: Boolean) = edit { it[Keys.showStatusBar] = value }
     suspend fun setStatusBarScrim(value: Float) = edit { it[Keys.statusBarScrim] = value.coerceIn(0f, 1f) }
     suspend fun setWallpaperUri(uri: String?) = edit {

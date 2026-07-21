@@ -27,6 +27,8 @@ data class LauncherSettings(
     val dockIconSizeDp: Float = 48f,
     val drawerIconSizeDp: Float = 48f,
     val drawerColumns: Int = 4,
+    /** When true, show a search field at the top of the app drawer. */
+    val drawerShowSearch: Boolean = true,
     val showStatusBar: Boolean = true,
     val statusBarScrimOpacity: Float = 0.4f,
     val defaultWallpaperUri: String? = null,

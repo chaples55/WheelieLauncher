@@ -2,68 +2,140 @@ package com.chaples55.wheelielauncher.ui.drawer
 
 import android.content.ComponentName
 import android.graphics.Bitmap
+import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.chaples55.wheelielauncher.R
+import com.chaples55.wheelielauncher.data.AppCustomization
 import com.chaples55.wheelielauncher.data.LauncherApp
-import com.chaples55.wheelielauncher.data.LauncherSettings
 import com.chaples55.wheelielauncher.data.key
-import com.chaples55.wheelielauncher.ui.components.CachedAppIcon
-import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private const val DISMISS_DISTANCE_PX = 140f
 
 @Composable
+fun AppDrawerHost(
+    visible: Boolean,
+    apps: List<LauncherApp>,
+    drawerColumns: Int,
+    drawerIconSizeDp: Float,
+    drawerShowLabels: Boolean,
+    drawerShowSearch: Boolean,
+    customizations: Map<String, AppCustomization>,
+    loadIconBitmap: suspend (ComponentName, String?, Int) -> Bitmap?,
+    peekIconBitmap: (ComponentName, String?, Int) -> Bitmap?,
+    onDismiss: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onLaunch: (ComponentName) -> Unit,
+    onAddToDock: (ComponentName) -> Unit,
+    onHide: (String) -> Unit,
+    onUninstall: (String) -> Unit,
+    onAppInfo: (String) -> Unit,
+    onChangeLabel: (ComponentName, String?) -> Unit,
+    onChangeIcon: (ComponentName) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = slideInVertically(
+            animationSpec = tween(320, easing = FastOutSlowInEasing),
+            initialOffsetY = { full -> full },
+        ) + fadeIn(animationSpec = tween(220)),
+        exit = slideOutVertically(
+            animationSpec = tween(240, easing = FastOutSlowInEasing),
+            targetOffsetY = { full -> full },
+        ) + fadeOut(animationSpec = tween(180)),
+        modifier = modifier,
+    ) {
+        // Reset search each time the drawer is shown.
+        var resetKey by remember { mutableStateOf(0) }
+        LaunchedEffect(visible) {
+            if (visible) resetKey++
+        }
+        key(resetKey) {
+            AppDrawer(
+                apps = apps,
+                drawerColumns = drawerColumns,
+                drawerIconSizeDp = drawerIconSizeDp,
+                drawerShowLabels = drawerShowLabels,
+                drawerShowSearch = drawerShowSearch,
+                customizations = customizations,
+                loadIconBitmap = loadIconBitmap,
+                peekIconBitmap = peekIconBitmap,
+                onDismiss = onDismiss,
+                onOpenSettings = onOpenSettings,
+                onLaunch = onLaunch,
+                onAddToDock = onAddToDock,
+                onHide = onHide,
+                onUninstall = onUninstall,
+                onAppInfo = onAppInfo,
+                onChangeLabel = onChangeLabel,
+                onChangeIcon = onChangeIcon,
+            )
+        }
+    }
+}
+
+@Composable
 fun AppDrawer(
     apps: List<LauncherApp>,
-    settings: LauncherSettings,
+    drawerColumns: Int,
+    drawerIconSizeDp: Float,
+    drawerShowLabels: Boolean,
+    drawerShowSearch: Boolean,
+    customizations: Map<String, AppCustomization>,
     loadIconBitmap: suspend (ComponentName, String?, Int) -> Bitmap?,
     peekIconBitmap: (ComponentName, String?, Int) -> Bitmap? = { _, _, _ -> null },
     onDismiss: () -> Unit,
@@ -78,71 +150,101 @@ fun AppDrawer(
     modifier: Modifier = Modifier,
 ) {
     BackHandler(onBack = onDismiss)
-    val gridState = rememberLazyGridState()
     var dragOffset by remember { mutableFloatStateOf(0f) }
-    var menuApp by remember { mutableStateOf<LauncherApp?>(null) }
+    var query by remember { mutableStateOf("") }
     var renameApp by remember { mutableStateOf<LauncherApp?>(null) }
     var renameText by remember { mutableStateOf("") }
+    val onDismissUpdated = rememberUpdatedState(onDismiss)
+    val appsUpdated = rememberUpdatedState(apps)
+    val labelsUpdated = rememberUpdatedState(
+        apps.associate { app ->
+            val key = app.componentName.key()
+            key to (customizations[key]?.customLabel ?: app.label)
+        },
+    )
+    val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
+    val columns = drawerColumns.coerceIn(2, 6)
+    val iconPx = with(density) { drawerIconSizeDp.dp.roundToPx().coerceIn(72, 256) }
+    val labelExtraPx = if (drawerShowLabels) {
+        with(density) { 36.dp.roundToPx() }
+    } else {
+        with(density) { 12.dp.roundToPx() }
+    }
+    val cellHeightPx = iconPx + labelExtraPx + with(density) { 12.dp.roundToPx() }
 
-    val nestedScroll = remember(onDismiss) {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                val atTop = !gridState.canScrollBackward
-                // While drawer is already pulled down, continue sheet drag from anywhere.
-                if (dragOffset > 0f) {
-                    val newOffset = (dragOffset + available.y).coerceAtLeast(0f)
-                    val consumedY = newOffset - dragOffset
-                    dragOffset = newOffset
-                    if (dragOffset >= DISMISS_DISTANCE_PX) {
-                        onDismiss()
-                        dragOffset = 0f
-                    }
-                    return Offset(0f, consumedY)
-                }
-                // Start pull-to-dismiss from list content when scrolled to top.
-                if (atTop && available.y > 0f && source == NestedScrollSource.UserInput) {
-                    dragOffset += available.y
-                    if (dragOffset >= DISMISS_DISTANCE_PX) {
-                        onDismiss()
-                        dragOffset = 0f
-                    }
-                    return Offset(0f, available.y)
-                }
-                return Offset.Zero
-            }
+    val displayLabels = labelsUpdated.value
+    val customIcons = remember(customizations) {
+        customizations.mapValues { it.value.customIcon }
+    }
 
-            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                // Overscroll at top of list.
-                if (available.y > 0f && source == NestedScrollSource.UserInput) {
-                    dragOffset += available.y
-                    if (dragOffset >= DISMISS_DISTANCE_PX) {
-                        onDismiss()
-                        dragOffset = 0f
-                    }
-                    return Offset(0f, available.y)
+    var shownApps by remember { mutableStateOf(apps) }
+    LaunchedEffect(apps, query, displayLabels) {
+        val q = query.trim()
+        shownApps = if (q.isEmpty()) {
+            apps
+        } else {
+            withContext(Dispatchers.Default) {
+                apps.filter { app ->
+                    val label = displayLabels[app.componentName.key()] ?: app.label
+                    label.contains(q, ignoreCase = true) ||
+                        app.packageName.contains(q, ignoreCase = true)
                 }
-                return Offset.Zero
-            }
-
-            override suspend fun onPreFling(available: Velocity): Velocity {
-                // Fast swipe down from anywhere closes the drawer.
-                if (available.y > 1800f) {
-                    onDismiss()
-                    dragOffset = 0f
-                    return available
-                }
-                return Velocity.Zero
             }
         }
+    }
+
+    val adapter = remember {
+        DrawerAppsAdapter(
+            scope = scope,
+            peekIcon = peekIconBitmap,
+            loadIcon = loadIconBitmap,
+            onLaunch = onLaunch,
+            onAddToDock = onAddToDock,
+            onChangeLabel = { cn ->
+                val list = appsUpdated.value
+                val labels = labelsUpdated.value
+                val app = list.find { it.componentName == cn } ?: return@DrawerAppsAdapter
+                renameApp = app
+                renameText = labels[cn.key()] ?: app.label
+            },
+            onChangeIcon = onChangeIcon,
+            onAppInfo = onAppInfo,
+            onHide = onHide,
+            onUninstall = onUninstall,
+        )
+    }
+
+    LaunchedEffect(onLaunch, onAddToDock, onChangeIcon, onAppInfo, onHide, onUninstall) {
+        adapter.onLaunch = onLaunch
+        adapter.onAddToDock = onAddToDock
+        adapter.onChangeIcon = onChangeIcon
+        adapter.onAppInfo = onAppInfo
+        adapter.onHide = onHide
+        adapter.onUninstall = onUninstall
+    }
+    LaunchedEffect(peekIconBitmap, loadIconBitmap) {
+        adapter.updateIconLoaders(peekIconBitmap, loadIconBitmap)
+    }
+    LaunchedEffect(shownApps) {
+        adapter.submitList(shownApps)
+    }
+    LaunchedEffect(iconPx, cellHeightPx, drawerShowLabels, customIcons, displayLabels) {
+        adapter.config = DrawerBindConfig(
+            iconSizePx = iconPx,
+            cellHeightPx = cellHeightPx,
+            showLabels = drawerShowLabels,
+            customIcons = customIcons,
+            displayLabels = displayLabels,
+        )
     }
 
     Box(
         modifier = modifier
             .fillMaxSize()
-            .offset { IntOffset(0, dragOffset.roundToInt()) }
+            .graphicsLayer { translationY = dragOffset }
             .background(Color(0xF2101014))
-            .statusBarsPadding()
-            .nestedScroll(nestedScroll),
+            .statusBarsPadding(),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             Row(
@@ -154,7 +256,7 @@ fun AppDrawer(
                                 if (dragAmount > 0) {
                                     dragOffset += dragAmount
                                     if (dragOffset >= DISMISS_DISTANCE_PX) {
-                                        onDismiss()
+                                        onDismissUpdated.value()
                                         dragOffset = 0f
                                     }
                                 } else {
@@ -162,7 +264,9 @@ fun AppDrawer(
                                 }
                             },
                             onDragEnd = {
-                                if (dragOffset >= DISMISS_DISTANCE_PX / 2f) onDismiss()
+                                if (dragOffset >= DISMISS_DISTANCE_PX / 2f) {
+                                    onDismissUpdated.value()
+                                }
                                 dragOffset = 0f
                             },
                             onDragCancel = { dragOffset = 0f },
@@ -188,96 +292,47 @@ fun AppDrawer(
                 }
             }
 
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(settings.drawerColumns.coerceIn(2, 6)),
-                state = gridState,
-                contentPadding = PaddingValues(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                items(apps, key = { it.componentName.flattenToString() }) { app ->
-                    val custom = settings.customizations[app.componentName.key()]
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.pointerInput(app) {
-                            detectTapGestures(
-                                onTap = { onLaunch(app.componentName) },
-                                onLongPress = { menuApp = app },
-                            )
-                        },
-                    ) {
-                        CachedAppIcon(
-                            componentName = app.componentName,
-                            customIcon = custom?.customIcon,
-                            contentDescription = app.label,
-                            size = settings.drawerIconSizeDp.dp,
-                            loadBitmap = loadIconBitmap,
-                            peekBitmap = peekIconBitmap,
-                        )
-                        if (settings.drawerShowLabels) {
-                            Text(
-                                text = app.label,
-                                color = Color.White,
-                                fontSize = 11.sp,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(top = 4.dp),
-                            )
-                        }
-                    }
-
-                    DropdownMenu(
-                        expanded = menuApp == app,
-                        onDismissRequest = { menuApp = null },
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.add_to_dock)) },
-                            onClick = {
-                                menuApp = null
-                                onAddToDock(app.componentName)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.change_label)) },
-                            onClick = {
-                                menuApp = null
-                                renameApp = app
-                                renameText = app.label
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.change_icon)) },
-                            onClick = {
-                                menuApp = null
-                                onChangeIcon(app.componentName)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.app_info)) },
-                            onClick = {
-                                menuApp = null
-                                onAppInfo(app.packageName)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.hide_app)) },
-                            onClick = {
-                                menuApp = null
-                                onHide(app.packageName)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.uninstall)) },
-                            onClick = {
-                                menuApp = null
-                                onUninstall(app.packageName)
-                            },
-                        )
-                    }
-                }
+            if (drawerShowSearch) {
+                DrawerSearchField(
+                    query = query,
+                    onQueryChange = { query = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                )
             }
+
+            AndroidView(
+                factory = { context ->
+                    RecyclerView(context).apply {
+                        layoutParams = ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                        )
+                        layoutManager = GridLayoutManager(context, columns)
+                        setHasFixedSize(true)
+                        itemAnimator = null
+                        setItemViewCacheSize(columns * 6)
+                        recycledViewPool.setMaxRecycledViews(0, columns * 8)
+                        overScrollMode = RecyclerView.OVER_SCROLL_IF_CONTENT_SCROLLS
+                        this.adapter = adapter
+                        setPadding(12, 8, 12, 24)
+                        clipToPadding = false
+                    }
+                },
+                update = { rv ->
+                    val lm = rv.layoutManager as? GridLayoutManager
+                    if (lm != null && lm.spanCount != columns) {
+                        lm.spanCount = columns
+                    }
+                    if (rv.adapter !== adapter) {
+                        rv.adapter = adapter
+                    }
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+            )
         }
     }
 
@@ -304,5 +359,54 @@ fun AppDrawer(
                 TextButton(onClick = { renameApp = null }) { Text("Cancel") }
             },
         )
+    }
+}
+
+@Composable
+private fun DrawerSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .background(Color(0xFF1C1C22), RoundedCornerShape(12.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Search,
+            contentDescription = null,
+            tint = Color.White.copy(alpha = 0.7f),
+        )
+        BasicTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            singleLine = true,
+            textStyle = TextStyle(color = Color.White, fontSize = 15.sp),
+            cursorBrush = SolidColor(Color.White),
+            decorationBox = { inner ->
+                Box(modifier = Modifier.padding(horizontal = 10.dp)) {
+                    if (query.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.search_apps),
+                            color = Color.White.copy(alpha = 0.45f),
+                            fontSize = 15.sp,
+                        )
+                    }
+                    inner()
+                }
+            },
+            modifier = Modifier.weight(1f),
+        )
+        if (query.isNotEmpty()) {
+            IconButton(onClick = { onQueryChange("") }) {
+                Icon(
+                    imageVector = Icons.Filled.Clear,
+                    contentDescription = "Clear",
+                    tint = Color.White.copy(alpha = 0.7f),
+                )
+            }
+        }
     }
 }

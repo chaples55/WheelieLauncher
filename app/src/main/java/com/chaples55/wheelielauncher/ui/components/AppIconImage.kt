@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -33,20 +34,27 @@ fun CachedAppIcon(
     val cacheKey = remember(componentName, customIcon, px) {
         IconBitmapCache.key(componentName, customIcon, px)
     }
-    var bitmap by remember(cacheKey) {
-        mutableStateOf(peekBitmap(componentName, customIcon, px))
+    var image by remember(cacheKey) {
+        mutableStateOf<ImageBitmap?>(
+            peekBitmap(componentName, customIcon, px)?.asImageBitmap(),
+        )
     }
     LaunchedEffect(cacheKey) {
-        // Always resolve through cache — returns immediately when preloaded.
-        bitmap = loadBitmap(componentName, customIcon, px) ?: bitmap
+        // Skip coroutine work when preload/peek already filled the cell.
+        if (image != null) return@LaunchedEffect
+        val bmp = loadBitmap(componentName, customIcon, px) ?: return@LaunchedEffect
+        image = bmp.asImageBitmap()
     }
-    if (bitmap != null) {
+    if (image != null) {
         Image(
-            bitmap = bitmap!!.asImageBitmap(),
+            bitmap = image!!,
             contentDescription = contentDescription,
             modifier = modifier.size(size),
             contentScale = ContentScale.Fit,
         )
+    } else {
+        // Reserve layout space so the grid does not jump as icons resolve.
+        androidx.compose.foundation.layout.Box(modifier = modifier.size(size))
     }
 }
 
@@ -70,7 +78,7 @@ fun AppIconImage(
     }
     if (bitmap != null) {
         Image(
-            bitmap = bitmap.asImageBitmap(),
+            bitmap = remember(bitmap) { bitmap.asImageBitmap() },
             contentDescription = contentDescription,
             modifier = modifier.size(size),
             contentScale = ContentScale.Fit,

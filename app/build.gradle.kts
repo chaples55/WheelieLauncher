@@ -54,6 +54,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.androidx.media)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.androidx.recyclerview)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
 

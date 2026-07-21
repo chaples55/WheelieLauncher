@@ -13,6 +13,8 @@
     <string name="dock_full">Dock is full</string>
     <string name="play">Play</string>
     <string name="pause">Pause</string>
+    <string name="search_apps">Search apps</string>
+    <string name="show_drawer_search">Show search bar</string>
     <string name="search_icons">Search icons</string>
     <string name="from_icon_pack">From icon pack</string>
     <string name="from_gallery">From gallery</string>

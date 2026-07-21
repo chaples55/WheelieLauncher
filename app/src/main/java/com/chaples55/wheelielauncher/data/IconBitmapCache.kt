@@ -1,6 +1,5 @@
 package com.chaples55.wheelielauncher.data
 
-import android.content.ComponentName
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.util.LruCache
@@ -12,6 +11,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * Process-wide icon bitmap cache so the drawer / dock do not re-decode icons on every open.
+ * Stores software ARGB bitmaps for reliable ImageView / Compose binding.
  */
 class IconBitmapCache {
     private val maxKb = ((Runtime.getRuntime().maxMemory() / 1024) / 8).toInt().coerceIn(2048, 16384)
@@ -35,7 +35,9 @@ class IconBitmapCache {
         mutex.withLock {
             get(key)?.let { return@withLock it }
             val drawable = loader() ?: return@withLock null
-            val bmp = drawable.toBitmap(sizePx, sizePx)
+            val bmp = drawable.toBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+            // Tip the GPU without converting to HARDWARE (safer for ImageView recycling).
+            bmp.prepareToDraw()
             put(key, bmp)
             bmp
         }
@@ -53,7 +55,7 @@ class IconBitmapCache {
     }
 
     companion object {
-        fun key(componentName: ComponentName, customIcon: String?, sizePx: Int): String =
+        fun key(componentName: android.content.ComponentName, customIcon: String?, sizePx: Int): String =
             "${componentName.flattenToString()}|${customIcon.orEmpty()}|$sizePx"
     }
 }

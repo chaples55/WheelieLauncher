@@ -35,7 +35,7 @@ import com.chaples55.wheelielauncher.WheelieApp
 import com.chaples55.wheelielauncher.data.AppCustomization
 import com.chaples55.wheelielauncher.data.DockItem
 import com.chaples55.wheelielauncher.data.key
-import com.chaples55.wheelielauncher.ui.drawer.AppDrawer
+import com.chaples55.wheelielauncher.ui.drawer.AppDrawerHost
 import com.chaples55.wheelielauncher.ui.home.CircularDock
 import com.chaples55.wheelielauncher.ui.home.DockSlot
 import com.chaples55.wheelielauncher.ui.home.NowPlayingCenter
@@ -185,36 +185,39 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
             )
         }
 
-        if (state.drawerOpen && !state.settingsOpen && iconPickerFor == null && !showHidden) {
-            AppDrawer(
-                apps = state.apps,
-                settings = state.settings,
-                loadIconBitmap = loadIconBitmap,
-                peekIconBitmap = peekIconBitmap,
-                onDismiss = { viewModel.closeDrawer() },
-                onOpenSettings = { viewModel.openSettings() },
-                onLaunch = {
-                    viewModel.closeDrawer()
-                    viewModel.launch(it)
-                },
-                onAddToDock = { cn ->
-                    viewModel.addToDock(cn) {
-                        Toast.makeText(context, context.getString(R.string.dock_full), Toast.LENGTH_SHORT).show()
-                    }
-                },
-                onHide = { viewModel.hideApp(it) },
-                onUninstall = { viewModel.uninstall(it) },
-                onAppInfo = { viewModel.openAppInfo(it) },
-                onChangeLabel = { cn, label ->
-                    val existing = state.settings.customizations[cn.key()]
-                    viewModel.setCustomization(
-                        cn,
-                        AppCustomization(customLabel = label, customIcon = existing?.customIcon),
-                    )
-                },
-                onChangeIcon = { iconPickerFor = it },
-            )
-        }
+        AppDrawerHost(
+            visible = state.drawerOpen && !state.settingsOpen && iconPickerFor == null && !showHidden,
+            apps = state.apps,
+            drawerColumns = state.settings.drawerColumns,
+            drawerIconSizeDp = state.settings.drawerIconSizeDp,
+            drawerShowLabels = state.settings.drawerShowLabels,
+            drawerShowSearch = state.settings.drawerShowSearch,
+            customizations = state.settings.customizations,
+            loadIconBitmap = loadIconBitmap,
+            peekIconBitmap = peekIconBitmap,
+            onDismiss = { viewModel.closeDrawer() },
+            onOpenSettings = { viewModel.openSettings() },
+            onLaunch = {
+                viewModel.closeDrawer()
+                viewModel.launch(it)
+            },
+            onAddToDock = { cn ->
+                viewModel.addToDock(cn) {
+                    Toast.makeText(context, context.getString(R.string.dock_full), Toast.LENGTH_SHORT).show()
+                }
+            },
+            onHide = { viewModel.hideApp(it) },
+            onUninstall = { viewModel.uninstall(it) },
+            onAppInfo = { viewModel.openAppInfo(it) },
+            onChangeLabel = { cn, label ->
+                val existing = state.settings.customizations[cn.key()]
+                viewModel.setCustomization(
+                    cn,
+                    AppCustomization(customLabel = label, customIcon = existing?.customIcon),
+                )
+            },
+            onChangeIcon = { iconPickerFor = it },
+        )
 
         if (state.settingsOpen && iconPickerFor == null && !showHidden) {
             SettingsScreen(

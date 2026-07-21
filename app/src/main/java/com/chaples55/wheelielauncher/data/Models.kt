@@ -1,0 +1,58 @@
+package com.chaples55.wheelielauncher.data
+
+import android.content.ComponentName
+import android.net.Uri
+
+data class LauncherApp(
+    val componentName: ComponentName,
+    val label: String,
+    val packageName: String = componentName.packageName,
+)
+
+data class DockItem(
+    val componentName: ComponentName,
+    val customLabel: String? = null,
+    /** Pack drawable name, content URI, or null for default/pack-resolved icon. */
+    val customIcon: String? = null,
+)
+
+data class AppCustomization(
+    val customLabel: String? = null,
+    val customIcon: String? = null,
+)
+
+data class LauncherSettings(
+    val dockShowLabels: Boolean = false,
+    val drawerShowLabels: Boolean = true,
+    val dockIconSizeDp: Float = 48f,
+    val drawerIconSizeDp: Float = 48f,
+    val drawerColumns: Int = 4,
+    val interceptVolumeAsWheel: Boolean = false,
+    val interceptPlayPause: Boolean = false,
+    val showStatusBar: Boolean = true,
+    val statusBarScrimOpacity: Float = 0.4f,
+    val defaultWallpaperUri: String? = null,
+    val iconPackPackage: String? = null,
+    val hiddenPackages: Set<String> = emptySet(),
+    val customizations: Map<String, AppCustomization> = emptyMap(),
+    val dockSeeded: Boolean = false,
+    val onboardingHomeDone: Boolean = false,
+    val onboardingMediaDone: Boolean = false,
+    /** Diameter of the center Now Playing widget in dp. */
+    val nowPlayingSizeDp: Float = 120f,
+    /** Ring radius as a fraction of the shorter screen half (0.45–0.92). */
+    val dockRingRadiusFraction: Float = 0.78f,
+)
+
+data class NowPlayingState(
+    val title: String? = null,
+    val artist: String? = null,
+    val artworkUri: Uri? = null,
+    val artworkBitmapKey: String? = null,
+    val isPlaying: Boolean = false,
+    val positionMs: Long = 0L,
+    val durationMs: Long = 0L,
+    val hasSession: Boolean = false,
+)
+
+fun ComponentName.key(): String = flattenToString()

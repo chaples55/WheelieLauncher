@@ -1,3 +1,32 @@
 <resources>
     <string name="app_name">Wheelie Launcher</string>
+    <string name="notification_listener_label">Wheelie Now Playing</string>
+    <string name="app_drawer">Apps</string>
+    <string name="settings">Settings</string>
+    <string name="remove_from_dock">Remove from dock</string>
+    <string name="add_to_dock">Add to dock</string>
+    <string name="change_label">Change label</string>
+    <string name="change_icon">Change icon</string>
+    <string name="app_info">App info</string>
+    <string name="hide_app">Hide</string>
+    <string name="uninstall">Uninstall</string>
+    <string name="dock_full">Dock is full</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="search_icons">Search icons</string>
+    <string name="from_icon_pack">From icon pack</string>
+    <string name="from_gallery">From gallery</string>
+    <string name="reset_icon">Reset to default</string>
+    <string name="hidden_apps">Hidden apps</string>
+    <string name="default_wallpaper">Default wallpaper</string>
+    <string name="clear_wallpaper">Reset wallpaper</string>
+    <string name="set_as_home">Set as default home</string>
+    <string name="enable_notification_access">Enable notification access</string>
+    <string name="onboarding_home_title">Set Wheelie as Home</string>
+    <string name="onboarding_home_body">Choose Wheelie Launcher as your default home app to use the circular dock.</string>
+    <string name="onboarding_media_title">Now Playing access</string>
+    <string name="onboarding_media_body">Allow notification access so Wheelie can show album art and playback controls from your music apps.</string>
+    <string name="continue_label">Continue</string>
+    <string name="skip">Skip</string>
+    <string name="open_settings">Open settings</string>
 </resources>

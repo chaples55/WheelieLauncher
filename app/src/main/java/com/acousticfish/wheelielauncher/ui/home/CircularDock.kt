@@ -247,7 +247,7 @@ private fun DockSlotItem(
             when (val slot = placement.slot) {
                 DockSlot.Drawer -> {
                     Icon(
-                        painter = painterResource(R.drawable.blur_on_24),
+                        painter = painterResource(R.drawable.drawer_icon),
                         contentDescription = stringResource(R.string.app_drawer),
                         tint = Color.White,
                         modifier = Modifier.size(iconSize),

@@ -27,12 +27,13 @@ fun CachedAppIcon(
     size: Dp,
     loadBitmap: suspend (ComponentName, String?, Int) -> Bitmap?,
     peekBitmap: (ComponentName, String?, Int) -> Bitmap? = { _, _, _ -> null },
+    iconPackPackage: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
     val px = with(density) { size.roundToPx().coerceAtLeast(1) }
-    val cacheKey = remember(componentName, customIcon, px) {
-        IconBitmapCache.key(componentName, customIcon, px)
+    val cacheKey = remember(componentName, customIcon, px, iconPackPackage) {
+        IconBitmapCache.key(componentName, customIcon, px, iconPackPackage)
     }
     var image by remember(cacheKey) {
         mutableStateOf<ImageBitmap?>(
@@ -40,8 +41,6 @@ fun CachedAppIcon(
         )
     }
     LaunchedEffect(cacheKey) {
-        // Skip coroutine work when preload/peek already filled the cell.
-        if (image != null) return@LaunchedEffect
         val bmp = loadBitmap(componentName, customIcon, px) ?: return@LaunchedEffect
         image = bmp.asImageBitmap()
     }

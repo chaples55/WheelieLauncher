@@ -78,6 +78,7 @@ fun CircularDock(
     onLaunch: (DockSlot) -> Unit,
     onRemove: (ComponentName) -> Unit,
     onReorder: (ComponentName, Int) -> Unit,
+    iconPackPackage: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -128,6 +129,7 @@ fun CircularDock(
                 onMenuForChange = { menuFor = it },
                 loadIconBitmap = loadIconBitmap,
                 peekIconBitmap = peekIconBitmap,
+                iconPackPackage = iconPackPackage,
                 resolveLabel = resolveLabel,
                 onSelect = onSelect,
                 onLaunch = onLaunch,
@@ -156,6 +158,7 @@ private fun DockSlotItem(
     onMenuForChange: (ComponentName?) -> Unit,
     loadIconBitmap: suspend (ComponentName, String?, Int) -> Bitmap?,
     peekIconBitmap: (ComponentName, String?, Int) -> Bitmap?,
+    iconPackPackage: String?,
     resolveLabel: (DockItem) -> String,
     onSelect: (Int) -> Unit,
     onLaunch: (DockSlot) -> Unit,
@@ -258,6 +261,7 @@ private fun DockSlotItem(
                         size = iconSize,
                         loadBitmap = loadIconBitmap,
                         peekBitmap = peekIconBitmap,
+                        iconPackPackage = iconPackPackage,
                     )
                     if (showLabels) {
                         Label(resolveLabel(slot.item), iconSize)

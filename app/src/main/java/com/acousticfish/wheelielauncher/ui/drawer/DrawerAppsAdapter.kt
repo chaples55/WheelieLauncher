@@ -48,6 +48,7 @@ data class DrawerBindConfig(
     val columns: Int,
     val customIcons: Map<String, String?>,
     val displayLabels: Map<String, String>,
+    val iconPackPackage: String? = null,
 )
 
 class DrawerAppsAdapter(
@@ -78,8 +79,11 @@ class DrawerAppsAdapter(
             val sizeChanged = field.iconSizePx != value.iconSizePx ||
                 field.cellHeightPx != value.cellHeightPx ||
                 field.showLabels != value.showLabels
+            val iconsChanged = field.customIcons != value.customIcons ||
+                field.iconPackPackage != value.iconPackPackage ||
+                field.displayLabels != value.displayLabels
             field = value
-            if (sizeChanged) notifyDataSetChanged()
+            if (sizeChanged || iconsChanged) notifyDataSetChanged()
         }
 
     var queryText: String = ""
@@ -233,7 +237,12 @@ class DrawerAppsAdapter(
             label.text = labelText
             icon.contentDescription = labelText
             icon.setImageDrawable(placeholder)
-            boundKey = IconBitmapCache.key(app.componentName, customIcon, iconPx)
+            boundKey = IconBitmapCache.key(
+                app.componentName,
+                customIcon,
+                iconPx,
+                config.iconPackPackage,
+            )
 
             val peeked = peekIcon(app.componentName, customIcon, iconPx)
             if (peeked != null && !peeked.isRecycled) {

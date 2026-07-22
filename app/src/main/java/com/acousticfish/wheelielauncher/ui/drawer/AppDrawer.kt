@@ -30,7 +30,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.graphics.toColorInt
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.GridLayoutManager
@@ -66,6 +65,7 @@ fun AppDrawerHost(
     defaultWallpaperUri: String?,
     ensureBlurred: suspend (String, Bitmap) -> Bitmap?,
     customizations: Map<String, AppCustomization>,
+    iconPackPackage: String? = null,
     loadIconBitmap: suspend (ComponentName, String?, Int) -> Bitmap?,
     peekIconBitmap: (ComponentName, String?, Int) -> Bitmap?,
     onDismiss: () -> Unit,
@@ -139,9 +139,7 @@ fun AppDrawerHost(
             defaultWallpaperUri = defaultWallpaperUri,
             ensureBlurred = ensureBlurred,
             scrimAlpha = drawerBackgroundOpacity,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer { alpha = contentAlpha.coerceAtLeast(0.001f) },
+            modifier = Modifier.fillMaxSize(),
         )
 
         Box(
@@ -156,6 +154,7 @@ fun AppDrawerHost(
                 drawerShowLabels = drawerShowLabels,
                 drawerShowSearch = drawerShowSearch,
                 customizations = customizations,
+                iconPackPackage = iconPackPackage,
                 loadIconBitmap = loadIconBitmap,
                 peekIconBitmap = peekIconBitmap,
                 touchEnabled = interactive,
@@ -195,6 +194,7 @@ fun AppDrawer(
     drawerShowLabels: Boolean,
     drawerShowSearch: Boolean,
     customizations: Map<String, AppCustomization>,
+    iconPackPackage: String? = null,
     loadIconBitmap: suspend (ComponentName, String?, Int) -> Bitmap?,
     peekIconBitmap: (ComponentName, String?, Int) -> Bitmap? = { _, _, _ -> null },
     onDismiss: () -> Unit,
@@ -306,7 +306,7 @@ fun AppDrawer(
     LaunchedEffect(shownApps, drawerShowSearch) {
         adapter.submitList(buildDrawerRows(shownApps, drawerShowSearch))
     }
-    LaunchedEffect(iconPx, cellHeightPx, drawerShowLabels, drawerShowSearch, columns, customIcons, displayLabels) {
+    LaunchedEffect(iconPx, cellHeightPx, drawerShowLabels, drawerShowSearch, columns, customIcons, displayLabels, iconPackPackage) {
         adapter.config = DrawerBindConfig(
             iconSizePx = iconPx,
             cellHeightPx = cellHeightPx,
@@ -315,6 +315,7 @@ fun AppDrawer(
             columns = columns,
             customIcons = customIcons,
             displayLabels = displayLabels,
+            iconPackPackage = iconPackPackage,
         )
     }
     LaunchedEffect(query) {
@@ -328,7 +329,7 @@ fun AppDrawer(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT,
                 )
-                setBackgroundColor("#F2101014".toColorInt())
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 layoutManager = GridLayoutManager(context, columns).also { lm ->
                     lm.spanSizeLookup = adapter.spanSizeLookup(columns)
                 }

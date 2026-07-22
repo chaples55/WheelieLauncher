@@ -26,6 +26,10 @@ class IconBitmapCache {
         synchronized(cache) { cache.put(key, bitmap) }
     }
 
+    fun clear() {
+        synchronized(cache) { cache.evictAll() }
+    }
+
     suspend fun getOrLoad(
         key: String,
         sizePx: Int,
@@ -55,7 +59,12 @@ class IconBitmapCache {
     }
 
     companion object {
-        fun key(componentName: android.content.ComponentName, customIcon: String?, sizePx: Int): String =
-            "${componentName.flattenToString()}|${customIcon.orEmpty()}|$sizePx"
+        fun key(
+            componentName: android.content.ComponentName,
+            customIcon: String?,
+            sizePx: Int,
+            iconPackPackage: String? = null,
+        ): String =
+            "${componentName.flattenToString()}|${customIcon.orEmpty()}|$sizePx|${iconPackPackage.orEmpty()}"
     }
 }

@@ -273,6 +273,7 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
                 onLaunch = onLaunchDock,
                 onRemove = onRemoveDock,
                 onReorder = onReorderDock,
+                iconPackPackage = state.settings.iconPackPackage,
             )
 
             NowPlayingCenter(
@@ -350,6 +351,7 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
             defaultWallpaperUri = state.settings.defaultWallpaperUri,
             ensureBlurred = ensureBlurred,
             customizations = state.settings.customizations,
+            iconPackPackage = state.settings.iconPackPackage,
             loadIconBitmap = loadIconBitmap,
             peekIconBitmap = peekIconBitmap,
             onDismiss = {

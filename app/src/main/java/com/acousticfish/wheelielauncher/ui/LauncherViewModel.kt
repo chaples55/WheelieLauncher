@@ -117,18 +117,40 @@ class LauncherViewModel(private val container: AppContainer) : ViewModel() {
             }
         }
         viewModelScope.launch {
+            var first = true
+            container.settingsRepository.settings
+                .map { it.iconPackPackage }
+                .distinctUntilChanged()
+                .collect {
+                    if (!first) container.iconBitmapCache.clear()
+                    first = false
+                }
+        }
+        viewModelScope.launch {
             combine(
                 uiState.map {
-                    Triple(it.apps, it.settings.drawerIconSizeDp, it.settings.dockIconSizeDp)
+                    PreloadRequest(
+                        apps = it.apps,
+                        drawerSizeDp = it.settings.drawerIconSizeDp,
+                        dockSizeDp = it.settings.dockIconSizeDp,
+                        density = 0f, // filled below
+                        iconPackPackage = it.settings.iconPackPackage,
+                    )
                 },
                 iconDensity,
-            ) { triple, density ->
-                PreloadRequest(triple.first, triple.second, triple.third, density)
+            ) { req, density ->
+                req.copy(density = density)
             }
                 .distinctUntilChanged()
                 .collect { req ->
-                    if (req.apps.isNotEmpty()) {
-                        preloadIcons(req.apps, req.drawerSizeDp, req.dockSizeDp, req.density)
+                    if (req.apps.isNotEmpty() && req.density > 0f) {
+                        preloadIcons(
+                            apps = req.apps,
+                            drawerSizeDp = req.drawerSizeDp,
+                            dockSizeDp = req.dockSizeDp,
+                            density = req.density,
+                            iconPackPackage = req.iconPackPackage,
+                        )
                     }
                 }
         }
@@ -139,6 +161,7 @@ class LauncherViewModel(private val container: AppContainer) : ViewModel() {
         val drawerSizeDp: Float,
         val dockSizeDp: Float,
         val density: Float,
+        val iconPackPackage: String?,
     )
 
     override fun onCleared() {
@@ -217,7 +240,9 @@ class LauncherViewModel(private val container: AppContainer) : ViewModel() {
     fun peekIconBitmap(componentName: ComponentName, customIcon: String?, sizePx: Int): Bitmap? {
         val settings = uiState.value.settings
         val custom = customIcon ?: settings.customizations[componentName.key()]?.customIcon
-        return container.iconBitmapCache.get(IconBitmapCache.key(componentName, custom, sizePx))
+        return container.iconBitmapCache.get(
+            IconBitmapCache.key(componentName, custom, sizePx, settings.iconPackPackage),
+        )
     }
 
     suspend fun resolveIcon(componentName: ComponentName, customIcon: String? = null): Drawable? {
@@ -233,7 +258,7 @@ class LauncherViewModel(private val container: AppContainer) : ViewModel() {
     ): Bitmap? {
         val settings = uiState.value.settings
         val custom = customIcon ?: settings.customizations[componentName.key()]?.customIcon
-        val key = IconBitmapCache.key(componentName, custom, sizePx)
+        val key = IconBitmapCache.key(componentName, custom, sizePx, settings.iconPackPackage)
         return container.iconBitmapCache.getOrLoad(key, sizePx) {
             container.iconPackRepository.resolveIcon(componentName, custom)
         }
@@ -244,6 +269,7 @@ class LauncherViewModel(private val container: AppContainer) : ViewModel() {
         drawerSizeDp: Float,
         dockSizeDp: Float,
         density: Float,
+        iconPackPackage: String?,
     ) {
         viewModelScope.launch {
             val settings = uiState.value.settings
@@ -252,7 +278,7 @@ class LauncherViewModel(private val container: AppContainer) : ViewModel() {
                 val sizePx = (dp * density).toInt().coerceIn(48, 256)
                 val loaders = apps.map { app ->
                     val custom = settings.customizations[app.componentName.key()]?.customIcon
-                    val key = IconBitmapCache.key(app.componentName, custom, sizePx)
+                    val key = IconBitmapCache.key(app.componentName, custom, sizePx, iconPackPackage)
                     key to suspend {
                         container.iconPackRepository.resolveIcon(app.componentName, custom)
                     }

@@ -59,7 +59,7 @@ data class LauncherSettings(
     val eqAppComponent: String? = null,
     /** Show previous/next media skip buttons in the bottom corners. */
     val showSkipButtons: Boolean = false,
-    /** Dark scrim over the drawer wallpaper (0 = clear blur, 1 = fully opaque). */
+    /** Dark scrim over the fixed home wallpaper while the drawer is open. */
     val drawerBackgroundOpacity: Float = 0.45f,
     /** Now Playing progress / battery arc stroke width in dp. */
     val progressBarThicknessDp: Float = 4f,

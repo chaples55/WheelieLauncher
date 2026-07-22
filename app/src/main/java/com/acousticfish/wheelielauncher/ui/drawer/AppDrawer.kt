@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
@@ -21,9 +20,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -37,12 +34,14 @@ import com.acousticfish.wheelielauncher.R
 import com.acousticfish.wheelielauncher.data.AppCustomization
 import com.acousticfish.wheelielauncher.data.LauncherApp
 import com.acousticfish.wheelielauncher.data.key
-import com.acousticfish.wheelielauncher.ui.home.WallpaperBackground
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.withContext
 
 /**
+ * Transparent drawer sheet over the fixed home wallpaper.
+ * Home chrome fades separately; only the app grid slides with progress.
+ *
  * @param progressController shared Murine-style progress (0 closed … 1 open)
  * @param visible intent from ViewModel; animated via [progressController]
  */
@@ -55,15 +54,6 @@ fun AppDrawerHost(
     drawerIconSizeDp: Float,
     drawerShowLabels: Boolean,
     drawerShowSearch: Boolean,
-    drawerBackgroundOpacity: Float,
-    artKey: String,
-    isMediaArt: Boolean,
-    artworkBitmapKey: String?,
-    artworkBitmap: Bitmap?,
-    blurredBitmap: Bitmap?,
-    artworkUri: android.net.Uri?,
-    defaultWallpaperUri: String?,
-    ensureBlurred: suspend (String, Bitmap) -> Bitmap?,
     customizations: Map<String, AppCustomization>,
     iconPackPackage: String? = null,
     loadIconBitmap: suspend (ComponentName, String?, Int) -> Bitmap?,
@@ -126,63 +116,48 @@ fun AppDrawerHost(
             }
             .graphicsLayer {
                 translationY = translation
-                alpha = if (progress <= 0.001f) 0f else 1f
+                alpha = if (progress <= 0.001f) {
+                    0f
+                } else {
+                    contentAlpha.coerceAtLeast(0.001f)
+                }
             },
     ) {
-        WallpaperBackground(
-            artKey = artKey,
-            isMediaArt = isMediaArt,
-            artworkBitmapKey = artworkBitmapKey,
-            artworkBitmap = artworkBitmap,
-            blurredBitmap = blurredBitmap,
-            artworkUri = artworkUri,
-            defaultWallpaperUri = defaultWallpaperUri,
-            ensureBlurred = ensureBlurred,
-            scrimAlpha = drawerBackgroundOpacity,
-            modifier = Modifier.fillMaxSize(),
+        AppDrawer(
+            apps = apps,
+            drawerColumns = drawerColumns,
+            drawerIconSizeDp = drawerIconSizeDp,
+            drawerShowLabels = drawerShowLabels,
+            drawerShowSearch = drawerShowSearch,
+            customizations = customizations,
+            iconPackPackage = iconPackPackage,
+            loadIconBitmap = loadIconBitmap,
+            peekIconBitmap = peekIconBitmap,
+            touchEnabled = interactive,
+            onDismiss = { onDismissUpdated.value() },
+            onOpenSettings = onOpenSettings,
+            onLaunch = onLaunch,
+            onAddToDock = onAddToDock,
+            onHide = onHide,
+            onUninstall = onUninstall,
+            onAppInfo = onAppInfo,
+            onChangeLabel = onChangeLabel,
+            onChangeIcon = onChangeIcon,
+            onPullChanged = { pullPx ->
+                val h = progressController.panelHeightPx.coerceAtLeast(1f)
+                progressController.dragTo(1f - (pullPx / h))
+            },
+            onPullEnd = { pullPx, velocityY ->
+                val h = progressController.panelHeightPx.coerceAtLeast(1f)
+                val at = (1f - pullPx / h).coerceIn(0f, 1f)
+                progressController.settleFromGesture(
+                    atProgress = at,
+                    velocityYpxPerMs = velocityY,
+                    wasOpening = false,
+                )
+            },
+            resetPullToken = progress > 0.95f,
         )
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer { alpha = contentAlpha.coerceAtLeast(0.001f) },
-        ) {
-            AppDrawer(
-                apps = apps,
-                drawerColumns = drawerColumns,
-                drawerIconSizeDp = drawerIconSizeDp,
-                drawerShowLabels = drawerShowLabels,
-                drawerShowSearch = drawerShowSearch,
-                customizations = customizations,
-                iconPackPackage = iconPackPackage,
-                loadIconBitmap = loadIconBitmap,
-                peekIconBitmap = peekIconBitmap,
-                touchEnabled = interactive,
-                onDismiss = { onDismissUpdated.value() },
-                onOpenSettings = onOpenSettings,
-                onLaunch = onLaunch,
-                onAddToDock = onAddToDock,
-                onHide = onHide,
-                onUninstall = onUninstall,
-                onAppInfo = onAppInfo,
-                onChangeLabel = onChangeLabel,
-                onChangeIcon = onChangeIcon,
-                onPullChanged = { pullPx ->
-                    val h = progressController.panelHeightPx.coerceAtLeast(1f)
-                    progressController.dragTo(1f - (pullPx / h))
-                },
-                onPullEnd = { pullPx, velocityY ->
-                    val h = progressController.panelHeightPx.coerceAtLeast(1f)
-                    val at = (1f - pullPx / h).coerceIn(0f, 1f)
-                    progressController.settleFromGesture(
-                        atProgress = at,
-                        velocityYpxPerMs = velocityY,
-                        wasOpening = false,
-                    )
-                },
-                resetPullToken = progress > 0.95f,
-            )
-        }
     }
 }
 

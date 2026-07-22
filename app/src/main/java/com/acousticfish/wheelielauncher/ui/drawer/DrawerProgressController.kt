@@ -134,13 +134,15 @@ class DrawerProgressController(
 
         fun homeAlpha(p: Float): Float = 1f - earlyProgress(p)
 
-        fun scrimAlpha(p: Float): Float {
+        /** Dim over the fixed home wallpaper while the drawer opens. */
+        fun scrimAlpha(p: Float, maxAlpha: Float = 0.55f): Float {
+            val max = maxAlpha.coerceIn(0f, 1f)
             val start = 0.06f
             val end = BASE_COMMIT_DISTANCE
             return when {
-                p <= start -> 0f
-                p >= end -> 0.55f
-                else -> ((p - start) / (end - start)) * 0.55f
+                p <= start || max <= 0f -> 0f
+                p >= end -> max
+                else -> ((p - start) / (end - start)) * max
             }
         }
 

@@ -43,7 +43,7 @@
     <string name="skip_previous">Previous track</string>
     <string name="skip_next">Next track</string>
     <string name="not_set">Not set</string>
-    <string name="drawer_background_opacity">Drawer background opacity</string>
+    <string name="drawer_background_opacity">Drawer dim</string>
     <string name="settings_home">Home</string>
     <string name="settings_drawer">Drawer</string>
     <string name="settings_general">General</string>

@@ -167,7 +167,10 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
 
     val homeScale = DrawerProgressController.homeScale(drawerP)
     val homeAlpha = DrawerProgressController.homeAlpha(drawerP)
-    val scrimAlpha = DrawerProgressController.scrimAlpha(drawerP)
+    val scrimAlpha = DrawerProgressController.scrimAlpha(
+        drawerP,
+        maxAlpha = state.settings.drawerBackgroundOpacity,
+    )
 
     var homeDragAccum by remember { mutableFloatStateOf(0f) }
     var homeDragProgress by remember { mutableFloatStateOf(0f) }
@@ -344,15 +347,6 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
             drawerIconSizeDp = state.settings.drawerIconSizeDp,
             drawerShowLabels = state.settings.drawerShowLabels,
             drawerShowSearch = state.settings.drawerShowSearch,
-            drawerBackgroundOpacity = state.settings.drawerBackgroundOpacity,
-            artKey = artKey,
-            isMediaArt = nowPlayingMeta.hasSession && artKey.startsWith("media:"),
-            artworkBitmapKey = nowPlayingMeta.artworkBitmapKey,
-            artworkBitmap = artworkBitmap,
-            blurredBitmap = blurredBitmap,
-            artworkUri = nowPlayingMeta.artworkUri,
-            defaultWallpaperUri = state.settings.defaultWallpaperUri,
-            ensureBlurred = ensureBlurred,
             customizations = state.settings.customizations,
             iconPackPackage = state.settings.iconPackPackage,
             loadIconBitmap = loadIconBitmap,

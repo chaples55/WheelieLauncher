@@ -281,6 +281,9 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
                 progress = viewModel.playbackProgress,
                 artworkBitmap = artworkBitmap,
                 diameter = state.settings.nowPlayingSizeDp.dp,
+                progressStrokeDp = state.settings.progressBarThicknessDp,
+                showBatteryBar = state.settings.showBatteryBar,
+                showTrackInfo = state.settings.showTrackInfo,
                 onOpenApp = onOpenNowPlaying,
                 onPlayPause = onPlayPause,
             )

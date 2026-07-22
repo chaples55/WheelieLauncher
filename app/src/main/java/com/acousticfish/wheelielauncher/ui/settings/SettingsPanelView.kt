@@ -58,6 +58,7 @@ class SettingsPanelView @JvmOverloads constructor(
     private var statusScrim = 0.4f
     private var swipeSensitivity = 1f
     private var drawerBgOpacity = 0.45f
+    private var progressThickness = 4f
 
     init {
         LayoutInflater.from(context).inflate(R.layout.settings_panel, this, true)
@@ -91,6 +92,7 @@ class SettingsPanelView @JvmOverloads constructor(
         statusScrim = settings.statusBarScrimOpacity
         swipeSensitivity = settings.swipeSensitivity
         drawerBgOpacity = settings.drawerBackgroundOpacity
+        progressThickness = settings.progressBarThicknessDp
         showPage(page)
     }
 
@@ -252,6 +254,25 @@ class SettingsPanelView @JvmOverloads constructor(
             },
             onLive = { nowPlayingSize = it },
         )
+        sliderRow(
+            initialLabel = "${context.getString(R.string.progress_bar_thickness)} (${progressThickness.toInt()} dp)",
+            value = progressThickness,
+            min = 2f,
+            max = 14f,
+            steps = 0,
+            onLabel = { "${context.getString(R.string.progress_bar_thickness)} (${it.toInt()} dp)" },
+            onCommit = {
+                progressThickness = it
+                host?.onUpdate { repo -> repo.setProgressBarThickness(it) }
+            },
+            onLive = { progressThickness = it },
+        )
+        switchRow(context.getString(R.string.show_battery_bar), settings.showBatteryBar) {
+            host?.onUpdate { repo -> repo.setShowBatteryBar(it) }
+        }
+        switchRow(context.getString(R.string.show_track_info), settings.showTrackInfo) {
+            host?.onUpdate { repo -> repo.setShowTrackInfo(it) }
+        }
 
         section("Chrome")
         switchRow(context.getString(R.string.show_clock), settings.showClock) {

@@ -61,6 +61,12 @@ data class LauncherSettings(
     val showSkipButtons: Boolean = false,
     /** Dark scrim over the drawer wallpaper (0 = clear blur, 1 = fully opaque). */
     val drawerBackgroundOpacity: Float = 0.45f,
+    /** Now Playing progress / battery arc stroke width in dp. */
+    val progressBarThicknessDp: Float = 4f,
+    /** Show battery level arc mirrored above the album art. */
+    val showBatteryBar: Boolean = true,
+    /** Show scrolling artist / title around the play button. */
+    val showTrackInfo: Boolean = true,
 )
 
 data class NowPlayingState(

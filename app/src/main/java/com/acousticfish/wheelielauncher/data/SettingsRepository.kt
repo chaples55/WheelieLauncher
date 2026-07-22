@@ -44,6 +44,9 @@ class SettingsRepository(private val context: Context) {
         val eqAppComponent = stringPreferencesKey("eq_app_component")
         val showSkipButtons = booleanPreferencesKey("show_skip_buttons")
         val drawerBackgroundOpacity = floatPreferencesKey("drawer_bg_opacity")
+        val progressBarThickness = floatPreferencesKey("progress_bar_thickness")
+        val showBatteryBar = booleanPreferencesKey("show_battery_bar")
+        val showTrackInfo = booleanPreferencesKey("show_track_info")
     }
 
     val settings: Flow<LauncherSettings> = context.dataStore.data.map { prefs ->
@@ -73,6 +76,9 @@ class SettingsRepository(private val context: Context) {
             eqAppComponent = prefs[Keys.eqAppComponent],
             showSkipButtons = prefs[Keys.showSkipButtons] ?: false,
             drawerBackgroundOpacity = (prefs[Keys.drawerBackgroundOpacity] ?: 0.45f).coerceIn(0f, 1f),
+            progressBarThicknessDp = (prefs[Keys.progressBarThickness] ?: 4f).coerceIn(2f, 14f),
+            showBatteryBar = prefs[Keys.showBatteryBar] ?: true,
+            showTrackInfo = prefs[Keys.showTrackInfo] ?: true,
         )
     }
 
@@ -135,6 +141,11 @@ class SettingsRepository(private val context: Context) {
     suspend fun setDrawerBackgroundOpacity(value: Float) = edit {
         it[Keys.drawerBackgroundOpacity] = value.coerceIn(0f, 1f)
     }
+    suspend fun setProgressBarThickness(value: Float) = edit {
+        it[Keys.progressBarThickness] = value.coerceIn(2f, 14f)
+    }
+    suspend fun setShowBatteryBar(value: Boolean) = edit { it[Keys.showBatteryBar] = value }
+    suspend fun setShowTrackInfo(value: Boolean) = edit { it[Keys.showTrackInfo] = value }
 
     private suspend fun edit(block: suspend (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         context.dataStore.edit(block)

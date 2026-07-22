@@ -79,6 +79,7 @@ fun CircularDock(
     onRemove: (ComponentName) -> Unit,
     onReorder: (ComponentName, Int) -> Unit,
     iconPackPackage: String? = null,
+    resolveCustomIcon: (ComponentName) -> String? = { null },
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -130,6 +131,7 @@ fun CircularDock(
                 loadIconBitmap = loadIconBitmap,
                 peekIconBitmap = peekIconBitmap,
                 iconPackPackage = iconPackPackage,
+                resolveCustomIcon = resolveCustomIcon,
                 resolveLabel = resolveLabel,
                 onSelect = onSelect,
                 onLaunch = onLaunch,
@@ -159,6 +161,7 @@ private fun DockSlotItem(
     loadIconBitmap: suspend (ComponentName, String?, Int) -> Bitmap?,
     peekIconBitmap: (ComponentName, String?, Int) -> Bitmap?,
     iconPackPackage: String?,
+    resolveCustomIcon: (ComponentName) -> String?,
     resolveLabel: (DockItem) -> String,
     onSelect: (Int) -> Unit,
     onLaunch: (DockSlot) -> Unit,
@@ -244,7 +247,7 @@ private fun DockSlotItem(
             when (val slot = placement.slot) {
                 DockSlot.Drawer -> {
                     Icon(
-                        painter = painterResource(R.drawable.apps_24),
+                        painter = painterResource(R.drawable.blur_on_24),
                         contentDescription = stringResource(R.string.app_drawer),
                         tint = Color.White,
                         modifier = Modifier.size(iconSize),
@@ -254,9 +257,11 @@ private fun DockSlotItem(
                     }
                 }
                 is DockSlot.App -> {
+                    val customIcon = resolveCustomIcon(slot.item.componentName)
+                        ?: slot.item.customIcon
                     CachedAppIcon(
                         componentName = slot.item.componentName,
-                        customIcon = slot.item.customIcon,
+                        customIcon = customIcon,
                         contentDescription = resolveLabel(slot.item),
                         size = iconSize,
                         loadBitmap = loadIconBitmap,

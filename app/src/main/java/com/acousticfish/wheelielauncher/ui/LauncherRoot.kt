@@ -238,6 +238,7 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
             artworkUri = nowPlayingMeta.artworkUri,
             defaultWallpaperUri = state.settings.defaultWallpaperUri,
             ensureBlurred = ensureBlurred,
+            modifier = Modifier.fillMaxSize(),
         )
 
         if (showStatusBar) {
@@ -277,6 +278,9 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
                 onRemove = onRemoveDock,
                 onReorder = onReorderDock,
                 iconPackPackage = state.settings.iconPackPackage,
+                resolveCustomIcon = { cn ->
+                    state.settings.customizations[cn.key()]?.customIcon
+                },
             )
 
             NowPlayingCenter(

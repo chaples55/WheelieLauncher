@@ -8,9 +8,9 @@ import android.graphics.drawable.Drawable
 import com.acousticfish.wheelielauncher.data.SettingsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import org.xmlpull.v1.XmlPullParser
 import java.util.concurrent.ConcurrentHashMap
@@ -31,10 +31,17 @@ class IconPackRepository(
 ) {
     private val cache = ConcurrentHashMap<String, Map<String, String>>()
     private val drawableListCache = ConcurrentHashMap<String, List<IconPackDrawable>>()
+    private val packs = MutableStateFlow<List<IconPackInfo>>(emptyList())
 
-    fun installedPacks(): Flow<List<IconPackInfo>> = flow {
-        emit(discoverPacks())
-    }.flowOn(Dispatchers.IO)
+    init {
+        packs.value = discoverPacks()
+    }
+
+    fun installedPacks(): Flow<List<IconPackInfo>> = packs.asStateFlow()
+
+    fun refreshInstalledPacks() {
+        packs.value = discoverPacks()
+    }
 
     suspend fun resolveIcon(
         componentName: ComponentName,
@@ -116,20 +123,20 @@ class IconPackRepository(
             Intent("org.adw.launcher.icons.ACTION_PICK_ICON"),
             Intent("com.teslacoilsw.launcher.THEME"),
         )
-        val packs = linkedMapOf<String, IconPackInfo>()
+        val packsMap = linkedMapOf<String, IconPackInfo>()
         for (intent in intents) {
             val resolved = pm.queryIntentActivities(intent, PackageManager.MATCH_ALL)
             for (info in resolved) {
                 val pkg = info.activityInfo.packageName
-                if (pkg !in packs) {
-                    packs[pkg] = IconPackInfo(
+                if (pkg !in packsMap) {
+                    packsMap[pkg] = IconPackInfo(
                         packageName = pkg,
                         label = info.loadLabel(pm)?.toString() ?: pkg,
                     )
                 }
             }
         }
-        return packs.values.sortedBy { it.label.lowercase() }
+        return packsMap.values.sortedBy { it.label.lowercase() }
     }
 
     private fun loadAppFilter(packPackage: String): Map<String, String> {

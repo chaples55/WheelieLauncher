@@ -37,12 +37,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeCap
@@ -50,11 +55,11 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
@@ -229,19 +234,34 @@ private fun RingArc(
     fillColor: Color,
 ) {
     val track = Color.White.copy(alpha = 0.25f)
-    Canvas(modifier = Modifier.fillMaxSize().padding(3.dp)) {
+    Canvas(modifier = Modifier.fillMaxSize()) {
         val strokePx = stroke.toPx()
-        val diameterPx = size.minDimension
-        val topLeft = Offset((size.width - diameterPx) / 2f, (size.height - diameterPx) / 2f)
+        // Keep the stroke fully inside the clipped circle and center on the art.
+        val inset = strokePx * 0.5f + 2.dp.toPx()
+        val diameterPx = (size.minDimension - inset * 2f).coerceAtLeast(1f)
+        val topLeft = Offset(
+            (size.width - diameterPx) / 2f,
+            (size.height - diameterPx) / 2f,
+        )
         val arcSize = Size(diameterPx, diameterPx)
+        // Soft centered shadow (no downward bias).
         drawArc(
-            color = Color.Black.copy(alpha = 0.45f),
+            color = Color.Black.copy(alpha = 0.16f),
             startAngle = startAngle,
             sweepAngle = sweepAngle,
             useCenter = false,
-            topLeft = topLeft + Offset(0f, strokePx * 0.35f),
+            topLeft = topLeft,
             size = arcSize,
-            style = Stroke(width = strokePx * 1.35f, cap = StrokeCap.Round),
+            style = Stroke(width = strokePx * 2.4f, cap = StrokeCap.Round),
+        )
+        drawArc(
+            color = Color.Black.copy(alpha = 0.1f),
+            startAngle = startAngle,
+            sweepAngle = sweepAngle,
+            useCenter = false,
+            topLeft = topLeft,
+            size = arcSize,
+            style = Stroke(width = strokePx * 3.4f, cap = StrokeCap.Round),
         )
         drawArc(
             color = track,
@@ -272,25 +292,26 @@ private fun MarqueeLabel(
     fontWeight: FontWeight,
 ) {
     val density = LocalDensity.current
+    var containerWidthPx by remember { mutableFloatStateOf(0f) }
     var textWidthPx by remember(text, fontSize) { mutableFloatStateOf(0f) }
-    val maxWidthPx = with(density) { maxWidth.toPx() }
-    val needsScroll = textWidthPx > maxWidthPx + 1f
+    val needsScroll = containerWidthPx > 0f && textWidthPx > containerWidthPx + 1f
     val offset = remember { Animatable(0f) }
+    val edgeFadePx = with(density) { 18.dp.toPx() }
 
-    LaunchedEffect(text, needsScroll, textWidthPx, maxWidthPx) {
+    LaunchedEffect(text, needsScroll, textWidthPx, containerWidthPx) {
         offset.snapTo(0f)
         if (!needsScroll) return@LaunchedEffect
-        val travel = textWidthPx - maxWidthPx
+        val travel = (textWidthPx - containerWidthPx).coerceAtLeast(1f)
         while (true) {
-            delay(900)
+            delay(1_000)
             offset.animateTo(
                 -travel,
                 animationSpec = tween(
-                    durationMillis = max(2_400, (travel * 12f).toInt()),
+                    durationMillis = max(2_400, (travel * 14f).toInt()),
                     easing = LinearEasing,
                 ),
             )
-            delay(900)
+            delay(1_000)
             offset.snapTo(0f)
         }
     }
@@ -299,17 +320,35 @@ private fun MarqueeLabel(
         modifier = Modifier
             .widthIn(max = maxWidth)
             .fillMaxWidth()
-            .clipToBounds(),
-        contentAlignment = Alignment.Center,
+            .onSizeChanged { containerWidthPx = it.width.toFloat() }
+            .clipToBounds()
+            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+            .drawWithContent {
+                drawContent()
+                if (needsScroll && size.width > 0f) {
+                    val fade = (edgeFadePx / size.width).coerceIn(0.05f, 0.35f)
+                    drawRect(
+                        brush = Brush.horizontalGradient(
+                            0f to Color.Transparent,
+                            fade to Color.Black,
+                            (1f - fade) to Color.Black,
+                            1f to Color.Transparent,
+                        ),
+                        blendMode = BlendMode.DstIn,
+                    )
+                }
+            },
+        contentAlignment = if (needsScroll) Alignment.CenterStart else Alignment.Center,
     ) {
         Text(
             text = text,
             maxLines = 1,
             softWrap = false,
             overflow = TextOverflow.Visible,
-            textAlign = TextAlign.Center,
             onTextLayout = { textWidthPx = it.size.width.toFloat() },
-            modifier = Modifier.graphicsLayer { translationX = offset.value },
+            modifier = Modifier
+                .wrapContentWidth(unbounded = true)
+                .graphicsLayer { translationX = offset.value },
             style = TextStyle(
                 color = Color.White,
                 fontSize = fontSize,

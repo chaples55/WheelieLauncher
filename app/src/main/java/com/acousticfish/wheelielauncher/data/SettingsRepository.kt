@@ -116,11 +116,24 @@ class SettingsRepository(private val context: Context) {
         }
         it[Keys.customizations] = encodeCustomizations(map)
     }
+
+    /** Clears per-app custom icons (keeps custom labels) when switching icon packs. */
+    suspend fun clearCustomIcons() = edit {
+        val map = decodeCustomizations(it[Keys.customizations]).mapValues { (_, value) ->
+            value.copy(customIcon = null)
+        }.filterValues { it.customLabel != null || it.customIcon != null }
+        if (map.isEmpty()) {
+            it.remove(Keys.customizations)
+        } else {
+            it[Keys.customizations] = encodeCustomizations(map)
+        }
+    }
+
     suspend fun setDockItemsJson(json: String) = edit { it[Keys.dockItems] = json }
     suspend fun setDockSeeded(value: Boolean) = edit { it[Keys.dockSeeded] = value }
     suspend fun setOnboardingHomeDone(value: Boolean) = edit { it[Keys.onboardingHome] = value }
     suspend fun setOnboardingMediaDone(value: Boolean) = edit { it[Keys.onboardingMedia] = value }
-    suspend fun setNowPlayingSize(value: Float) = edit { it[Keys.nowPlayingSize] = value.coerceIn(72f, 220f) }
+    suspend fun setNowPlayingSize(value: Float) = edit { it[Keys.nowPlayingSize] = value.coerceIn(72f, 264f) }
     suspend fun setDockRingRadius(value: Float) = edit { it[Keys.dockRingRadius] = value.coerceIn(0.45f, 0.92f) }
     suspend fun setSwipeUpToOpenDrawer(value: Boolean) = edit {
         it[Keys.swipeUpToOpenDrawer] = value

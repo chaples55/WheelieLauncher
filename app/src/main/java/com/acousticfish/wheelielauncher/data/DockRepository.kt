@@ -92,6 +92,20 @@ class DockRepository(
         saveDock(current)
     }
 
+    suspend fun updateCustomIcon(componentName: ComponentName, customIcon: String?) {
+        val current = dockItems.first()
+        val updated = current.map { item ->
+            if (item.componentName == componentName) item.copy(customIcon = customIcon) else item
+        }
+        if (updated != current) saveDock(updated)
+    }
+
+    suspend fun clearCustomIcons() {
+        val current = dockItems.first()
+        val updated = current.map { it.copy(customIcon = null) }
+        if (updated != current) saveDock(updated)
+    }
+
     private fun buildSeedDock(): List<DockItem> {
         val result = mutableListOf<DockItem>()
         resolveBrowser()?.let { result.add(DockItem(it)) }

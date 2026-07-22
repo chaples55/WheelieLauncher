@@ -219,7 +219,7 @@ class SettingsPanelView @JvmOverloads constructor(
             initialLabel = "Dock icon size (${dockIconSize.toInt()} dp)",
             value = dockIconSize,
             min = 36f,
-            max = 72f,
+            max = 100f,
             steps = 0,
             onLabel = { "Dock icon size (${it.toInt()} dp)" },
             onCommit = {
@@ -245,7 +245,7 @@ class SettingsPanelView @JvmOverloads constructor(
             initialLabel = "Now Playing size (${nowPlayingSize.toInt()} dp)",
             value = nowPlayingSize,
             min = 72f,
-            max = 220f,
+            max = 264f,
             steps = 0,
             onLabel = { "Now Playing size (${it.toInt()} dp)" },
             onCommit = {
@@ -364,7 +364,7 @@ class SettingsPanelView @JvmOverloads constructor(
             initialLabel = "Drawer icon size (${drawerIconSize.toInt()} dp)",
             value = drawerIconSize,
             min = 36f,
-            max = 72f,
+            max = 100f,
             steps = 0,
             onLabel = { "Drawer icon size (${it.toInt()} dp)" },
             onCommit = {

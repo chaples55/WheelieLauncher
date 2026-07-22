@@ -122,7 +122,11 @@ class LauncherViewModel(private val container: AppContainer) : ViewModel() {
                 .map { it.iconPackPackage }
                 .distinctUntilChanged()
                 .collect {
-                    if (!first) container.iconBitmapCache.clear()
+                    if (!first) {
+                        container.iconBitmapCache.clear()
+                        container.settingsRepository.clearCustomIcons()
+                        container.dockRepository.clearCustomIcons()
+                    }
                     first = false
                 }
         }
@@ -275,7 +279,7 @@ class LauncherViewModel(private val container: AppContainer) : ViewModel() {
             val settings = uiState.value.settings
             val sizeDps = listOf(drawerSizeDp, dockSizeDp).distinct()
             for (dp in sizeDps) {
-                val sizePx = (dp * density).toInt().coerceIn(48, 256)
+                val sizePx = (dp * density).toInt().coerceIn(48, 512)
                 val loaders = apps.map { app ->
                     val custom = settings.customizations[app.componentName.key()]?.customIcon
                     val key = IconBitmapCache.key(app.componentName, custom, sizePx, iconPackPackage)
@@ -318,6 +322,9 @@ class LauncherViewModel(private val container: AppContainer) : ViewModel() {
     fun setCustomization(componentName: ComponentName, customization: AppCustomization?) {
         viewModelScope.launch {
             container.settingsRepository.setCustomization(componentName.key(), customization)
+            container.dockRepository.updateCustomIcon(componentName, customization?.customIcon)
+            // Drop stale cache entries for this component so dock/drawer reload immediately.
+            container.iconBitmapCache.clear()
         }
     }
 
@@ -352,6 +359,7 @@ class LauncherViewModel(private val container: AppContainer) : ViewModel() {
     fun refreshApps() {
         viewModelScope.launch {
             container.installedAppsRepository.refresh()
+            container.iconPackRepository.refreshInstalledPacks()
         }
     }
 

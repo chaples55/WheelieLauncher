@@ -317,6 +317,16 @@ private fun MarqueeLabel(
         }
     }
 
+    // Always layout from the start so overflowing text's left edge is at x=0.
+    // Short labels are centered with an explicit translation instead.
+    val baseTranslationX = if (needsScroll) {
+        offset.value
+    } else if (containerWidthPx > 0f && textWidthPx > 0f) {
+        ((containerWidthPx - textWidthPx) / 2f).coerceAtLeast(0f)
+    } else {
+        0f
+    }
+
     Box(
         modifier = Modifier
             .widthIn(max = maxWidth)
@@ -339,7 +349,7 @@ private fun MarqueeLabel(
                     )
                 }
             },
-        contentAlignment = if (needsScroll) Alignment.CenterStart else Alignment.Center,
+        contentAlignment = Alignment.CenterStart,
     ) {
         Text(
             text = text,
@@ -349,7 +359,7 @@ private fun MarqueeLabel(
             onTextLayout = { textWidthPx = it.size.width.toFloat() },
             modifier = Modifier
                 .wrapContentWidth(unbounded = true)
-                .graphicsLayer { translationX = offset.value },
+                .graphicsLayer { translationX = baseTranslationX },
             style = TextStyle(
                 color = Color.White,
                 fontSize = fontSize,

@@ -110,8 +110,6 @@ class DrawerProgressController(
     companion object {
         /** Midpoint commit distance at sensitivity 1.0 (fraction of panel height). */
         const val BASE_COMMIT_DISTANCE = 0.2f
-        @Deprecated("Use BASE_COMMIT_DISTANCE", ReplaceWith("BASE_COMMIT_DISTANCE"))
-        const val COMMIT_DISTANCE = BASE_COMMIT_DISTANCE
         const val OPEN_DURATION_MS = 560
         const val CLOSE_DURATION_MS = 300
         const val FLING_VELOCITY_PX_MS = 0.8f

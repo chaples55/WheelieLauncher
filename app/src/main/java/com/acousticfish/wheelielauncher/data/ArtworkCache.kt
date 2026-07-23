@@ -4,8 +4,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.util.LruCache
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -32,10 +30,6 @@ class ArtworkCache {
     }
 
     fun getBlurred(key: String): Bitmap? = synchronized(blurCache) { blurCache.get(key) }
-
-    fun getArtImage(key: String): ImageBitmap? = getArt(key)?.asImageBitmap()
-
-    fun getBlurredImage(key: String): ImageBitmap? = getBlurred(key)?.asImageBitmap()
 
     suspend fun getOrCreateBlurred(
         key: String,

@@ -2,7 +2,6 @@ package com.acousticfish.wheelielauncher.ui
 
 import android.content.ComponentName
 import android.graphics.Bitmap
-import android.graphics.drawable.Drawable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -249,12 +248,6 @@ class LauncherViewModel(private val container: AppContainer) : ViewModel() {
         )
     }
 
-    suspend fun resolveIcon(componentName: ComponentName, customIcon: String? = null): Drawable? {
-        val settings = uiState.value.settings
-        val custom = customIcon ?: settings.customizations[componentName.key()]?.customIcon
-        return container.iconPackRepository.resolveIcon(componentName, custom)
-    }
-
     suspend fun cachedIconBitmap(
         componentName: ComponentName,
         customIcon: String?,
@@ -301,10 +294,6 @@ class LauncherViewModel(private val container: AppContainer) : ViewModel() {
 
     fun removeFromDock(componentName: ComponentName) {
         viewModelScope.launch { container.dockRepository.removeFromDock(componentName) }
-    }
-
-    fun reorderDock(from: Int, to: Int) {
-        viewModelScope.launch { container.dockRepository.reorder(from, to) }
     }
 
     fun moveDockItem(componentName: ComponentName, targetAppIndex: Int) {

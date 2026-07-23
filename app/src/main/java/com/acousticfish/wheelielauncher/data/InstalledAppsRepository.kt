@@ -4,7 +4,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.drawable.Drawable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,10 +16,6 @@ class InstalledAppsRepository(
 ) {
     private val packageManager: PackageManager = context.packageManager
     private val rawApps = MutableStateFlow<List<LauncherApp>>(emptyList())
-
-    init {
-        // Load synchronously-ish on first access via refresh from ViewModel; seed empty
-    }
 
     fun apps(): Flow<List<LauncherApp>> = combine(rawApps, settingsRepository.settings) { apps, settings ->
         apps
@@ -41,18 +36,6 @@ class InstalledAppsRepository(
         val loaded = loadApps()
         rawApps.value = loaded
         loaded
-    }
-
-    fun loadIcon(componentName: ComponentName): Drawable? {
-        return try {
-            packageManager.getActivityIcon(componentName)
-        } catch (_: Exception) {
-            try {
-                packageManager.getApplicationIcon(componentName.packageName)
-            } catch (_: Exception) {
-                null
-            }
-        }
     }
 
     fun launch(componentName: ComponentName) {

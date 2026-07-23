@@ -74,14 +74,6 @@ class DockRepository(
         saveDock(dockItems.first().filterNot { it.componentName == componentName })
     }
 
-    suspend fun reorder(fromIndex: Int, toIndex: Int) {
-        val current = dockItems.first().toMutableList()
-        if (fromIndex !in current.indices || toIndex !in current.indices) return
-        val item = current.removeAt(fromIndex)
-        current.add(toIndex, item)
-        saveDock(current)
-    }
-
     suspend fun moveToAngleIndex(componentName: ComponentName, targetAppIndex: Int) {
         val current = dockItems.first().toMutableList()
         val from = current.indexOfFirst { it.componentName == componentName }

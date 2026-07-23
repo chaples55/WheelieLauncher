@@ -22,9 +22,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -58,6 +55,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -68,6 +66,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.acousticfish.wheelielauncher.R
 import com.acousticfish.wheelielauncher.data.NowPlayingMeta
 import com.acousticfish.wheelielauncher.data.PlaybackProgress
 import kotlinx.coroutines.delay
@@ -186,7 +185,9 @@ fun NowPlayingCenter(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = if (meta.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    painter = painterResource(
+                        if (meta.isPlaying) R.drawable.pause_24 else R.drawable.play_arrow_24,
+                    ),
                     contentDescription = if (meta.isPlaying) "Pause" else "Play",
                     tint = Color.White,
                     modifier = Modifier.size(diameter * 0.16f),

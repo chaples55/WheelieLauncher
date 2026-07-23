@@ -22,12 +22,38 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Keep all ABIs (including x86/x86_64) for emulators.
+        }
         release {
             optimization {
-                enable = false
+                enable = true
             }
+            isShrinkResources = true
+            // Device ABIs only — drops emulator natives from release APKs.
+            ndk {
+                abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+            }
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
+
+    // Play App Bundle: deliver only the device's ABI / density / language.
+    bundle {
+        abi {
+            enableSplit = true
+        }
+        density {
+            enableSplit = true
+        }
+        language {
+            enableSplit = true
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -48,8 +74,6 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.compose.material.icons)
-    implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.coil.compose)
     implementation(libs.androidx.media)

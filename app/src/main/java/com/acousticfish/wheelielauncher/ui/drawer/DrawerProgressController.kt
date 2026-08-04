@@ -18,15 +18,21 @@ import kotlin.math.max
  * Drawer sheet progress:
  * - 0 = closed (home)
  * - 1 = open (drawer fully up)
- * Finger tracks progress directly; settle uses a short symmetric distance threshold.
+ * Finger tracks progress directly via [progress] (sync); settle animates through [animatable].
  */
 @Stable
 class DrawerProgressController(
     private val scope: CoroutineScope,
 ) {
-    val progress = Animatable(0f)
+    private val animatable = Animatable(0f)
+
+    /** UI-facing progress — updated synchronously during drag to avoid coroutine jitter. */
+    var progress by mutableFloatStateOf(0f)
+        private set
+
     var panelHeightPx by mutableFloatStateOf(0f)
         private set
+
     /** Fraction of panel height required to commit; derived from swipe sensitivity. */
     var commitDistance by mutableFloatStateOf(BASE_COMMIT_DISTANCE)
         private set
@@ -46,29 +52,38 @@ class DrawerProgressController(
 
     fun snapProgress(value: Float) {
         settleJob?.cancel()
-        settleJob = scope.launch { progress.snapTo(value.coerceIn(0f, 1f)) }
+        val v = value.coerceIn(0f, 1f)
+        progress = v
+        settleJob = scope.launch { animatable.snapTo(v) }
     }
 
     fun animateOpen() {
         settleJob?.cancel()
         settleJob = scope.launch {
-            progress.animateTo(1f, tween(OPEN_DURATION_MS, easing = ATOMIC_EASING))
+            animatable.snapTo(progress)
+            animatable.animateTo(1f, tween(OPEN_DURATION_MS, easing = ATOMIC_EASING)) {
+                progress = value
+            }
+            progress = 1f
         }
     }
 
     fun animateClose() {
         settleJob?.cancel()
         settleJob = scope.launch {
-            progress.animateTo(0f, tween(CLOSE_DURATION_MS, easing = ATOMIC_EASING))
+            animatable.snapTo(progress)
+            animatable.animateTo(0f, tween(CLOSE_DURATION_MS, easing = ATOMIC_EASING)) {
+                progress = value
+            }
+            progress = 0f
         }
     }
 
-    /** While the user is dragging, set progress immediately (no tween). */
+    /** While the user is dragging, set progress immediately (no coroutine hop). */
     fun dragTo(value: Float) {
         settleJob?.cancel()
-        settleJob = scope.launch {
-            progress.snapTo(value.coerceIn(0f, 1f))
-        }
+        settleJob = null
+        progress = value.coerceIn(0f, 1f)
     }
 
     /**
@@ -84,6 +99,7 @@ class DrawerProgressController(
     ) {
         settleJob?.cancel()
         val p = atProgress.coerceIn(0f, 1f)
+        progress = p
         val commit = commitDistance
         val fling = abs(velocityYpxPerMs) > FLING_VELOCITY_PX_MS
         val target = when {
@@ -95,15 +111,21 @@ class DrawerProgressController(
         val distance = abs(target - p)
         val duration = settleDurationMs(velocityYpxPerMs, distance)
         settleJob = scope.launch {
-            progress.snapTo(p)
-            if (distance < 0.001f) return@launch
-            progress.animateTo(
+            animatable.snapTo(p)
+            if (distance < 0.001f) {
+                progress = target
+                return@launch
+            }
+            animatable.animateTo(
                 target,
                 tween(
                     durationMillis = duration,
                     easing = if (fling) LinearEasing else ATOMIC_EASING,
                 ),
-            )
+            ) {
+                progress = value
+            }
+            progress = target
         }
     }
 

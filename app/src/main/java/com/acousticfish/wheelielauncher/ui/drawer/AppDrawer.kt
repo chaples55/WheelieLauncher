@@ -72,7 +72,7 @@ fun AppDrawerHost(
     modifier: Modifier = Modifier,
 ) {
     var mounted by remember { mutableStateOf(false) }
-    val progress = progressController.progress.value
+    val progress = progressController.progress
     val onDismissUpdated = rememberUpdatedState(onDismiss)
 
     // Mount as soon as we start opening so the first frame can track the finger.
@@ -83,7 +83,7 @@ fun AppDrawerHost(
     // Notify VM when settle completes (keeps drawerOpen in sync with animation).
     LaunchedEffect(progressController) {
         var lastBucket = -1
-        snapshotFlow { progressController.progress.value }
+        snapshotFlow { progressController.progress }
             .distinctUntilChanged()
             .collect { p ->
                 val bucket = when {

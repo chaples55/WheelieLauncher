@@ -294,14 +294,9 @@ class SettingsPanelView @JvmOverloads constructor(
         section("Wallpaper")
         navRow(
             context.getString(R.string.default_wallpaper),
-            if (settings.defaultWallpaperUri != null) "Custom image set" else "Built-in default",
+            if (settings.defaultWallpaperUri != null) "Custom image set" else "System wallpaper",
         ) {
             onPickWallpaper?.invoke()
-        }
-        if (settings.defaultWallpaperUri != null) {
-            navRow(context.getString(R.string.clear_wallpaper), null) {
-                host?.onUpdate { it.setWallpaperUri(null) }
-            }
         }
     }
 

@@ -4,9 +4,10 @@
         <item name="android:windowFullscreen">false</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:windowShowWallpaper">false</item>
-        <item name="android:windowBackground">@color/launcher_background</item>
-        <item name="android:colorBackground">@color/launcher_background</item>
+        <!-- Show the system wallpaper behind the launcher (capture is blocked for 3P apps). -->
+        <item name="android:windowShowWallpaper">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorBackground">@android:color/transparent</item>
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
     </style>
 </resources>

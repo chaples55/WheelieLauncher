@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import org.json.JSONObject
 
@@ -27,6 +28,8 @@ class SettingsRepository(private val context: Context) {
         val showStatusBar = booleanPreferencesKey("show_status_bar")
         val statusBarScrim = floatPreferencesKey("status_bar_scrim")
         val wallpaperUri = stringPreferencesKey("wallpaper_uri")
+        /** One-shot: drop launcher-copied wallpapers from pre–system-wallpaper builds. */
+        val legacyAppWallpaperCleared = booleanPreferencesKey("legacy_app_wallpaper_cleared")
         val iconPack = stringPreferencesKey("icon_pack")
         val hiddenPackages = stringSetPreferencesKey("hidden_packages")
         val customizations = stringPreferencesKey("customizations_json")
@@ -94,6 +97,20 @@ class SettingsRepository(private val context: Context) {
     suspend fun setStatusBarScrim(value: Float) = edit { it[Keys.statusBarScrim] = value.coerceIn(0f, 1f) }
     suspend fun setWallpaperUri(uri: String?) = edit {
         if (uri == null) it.remove(Keys.wallpaperUri) else it[Keys.wallpaperUri] = uri
+    }
+
+    /**
+     * Older builds stored a copied image in app files and drew it over the window.
+     * Clear that once so upgrades show the live system wallpaper instead.
+     */
+    suspend fun clearLegacyAppWallpaperOnce() {
+        val prefs = context.dataStore.data.first()
+        if (prefs[Keys.legacyAppWallpaperCleared] == true) return
+        WallpaperStore.clear(context)
+        edit {
+            it.remove(Keys.wallpaperUri)
+            it[Keys.legacyAppWallpaperCleared] = true
+        }
     }
     suspend fun setIconPack(packageName: String?) = edit {
         if (packageName == null) it.remove(Keys.iconPack) else it[Keys.iconPack] = packageName

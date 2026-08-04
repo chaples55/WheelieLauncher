@@ -286,6 +286,9 @@ class DrawerAppsAdapter(
  * RecyclerView that reports downward overscroll at the top so the drawer can dismiss.
  * [onPullChanged] receives pull distance in px; [onPullEnd] receives (pullPx, velocityY px/ms).
  * Positive velocityY = finger moving down.
+ *
+ * Uses [MotionEvent.getRawY] so pull tracking stays stable while the parent sheet
+ * translates under the finger (view-local Y would feedback and jitter).
  */
 class PullDismissRecyclerView @JvmOverloads constructor(
     context: android.content.Context,
@@ -297,7 +300,7 @@ class PullDismissRecyclerView @JvmOverloads constructor(
     var onPullEnd: ((Float, Float) -> Unit)? = null
 
     private var trackingPull = false
-    private var lastY = 0f
+    private var lastRawY = 0f
     private var velocityTracker: android.view.VelocityTracker? = null
 
     fun resetPull() {
@@ -319,7 +322,7 @@ class PullDismissRecyclerView @JvmOverloads constructor(
     override fun onInterceptTouchEvent(e: MotionEvent): Boolean {
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                lastY = e.y
+                lastRawY = e.rawY
                 ensureVelocityTracker()
                 velocityTracker?.clear()
                 velocityTracker?.addMovement(e)
@@ -330,9 +333,10 @@ class PullDismissRecyclerView @JvmOverloads constructor(
             }
             MotionEvent.ACTION_MOVE -> {
                 velocityTracker?.addMovement(e)
-                val dy = e.y - lastY
-                if (!trackingPull && !canScrollVertically(-1) && dy > 0f && abs(dy) > 4f) {
+                val dy = e.rawY - lastRawY
+                if (!trackingPull && !canScrollVertically(-1) && dy > 4f) {
                     trackingPull = true
+                    lastRawY = e.rawY
                     parent?.requestDisallowInterceptTouchEvent(true)
                     return true
                 }
@@ -345,16 +349,21 @@ class PullDismissRecyclerView @JvmOverloads constructor(
         ensureVelocityTracker()
         velocityTracker?.addMovement(e)
         when (e.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                lastRawY = e.rawY
+            }
             MotionEvent.ACTION_MOVE -> {
                 if (trackingPull || pullOffsetPx > 0f) {
-                    val dy = e.y - lastY
-                    lastY = e.y
+                    val dy = e.rawY - lastRawY
+                    lastRawY = e.rawY
                     if (!canScrollVertically(-1) || pullOffsetPx > 0f) {
                         trackingPull = true
                         pullOffsetPx = (pullOffsetPx + dy).coerceAtLeast(0f)
                         onPullChanged?.invoke(pullOffsetPx)
                         return true
                     }
+                } else {
+                    lastRawY = e.rawY
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
@@ -363,14 +372,13 @@ class PullDismissRecyclerView @JvmOverloads constructor(
                     val vyPxPerMs = (velocityTracker?.yVelocity ?: 0f) / 1000f
                     onPullEnd?.invoke(pullOffsetPx, vyPxPerMs)
                     trackingPull = false
-                    lastY = e.y
+                    lastRawY = e.rawY
                     recycleVelocityTracker()
                     return true
                 }
                 recycleVelocityTracker()
             }
         }
-        lastY = e.y
         return super.onTouchEvent(e)
     }
 }

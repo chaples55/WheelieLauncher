@@ -22,7 +22,6 @@
     <string name="reset_icon">Reset to default</string>
     <string name="hidden_apps">Hidden apps</string>
     <string name="default_wallpaper">Default wallpaper</string>
-    <string name="clear_wallpaper">Reset wallpaper</string>
     <string name="set_as_home">Set as default home</string>
     <string name="enable_notification_access">Enable notification access</string>
     <string name="onboarding_home_title">Set Wheelie as Home</string>

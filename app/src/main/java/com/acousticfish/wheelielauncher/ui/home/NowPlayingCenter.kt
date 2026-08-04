@@ -95,6 +95,7 @@ fun NowPlayingCenter(
     val strokeDp = progressStrokeDp.dp.coerceIn(2.dp, 14.dp)
     val labelMaxWidth = diameter * 0.82f
     val labelSize = (diameter.value * 0.09f).coerceIn(10f, 16f).sp
+    val hasArtwork = displayedImage != null || meta.artworkUri != null
 
     LaunchedEffect(artKey, targetImage) {
         if (artKey == displayedKey && targetImage == displayedImage) {
@@ -118,7 +119,9 @@ fun NowPlayingCenter(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF1C1C22)),
+                .background(
+                    if (hasArtwork) Color(0xFF1C1C22) else Color.Black.copy(alpha = 0.28f),
+                ),
         ) {
             Box(modifier = Modifier.fillMaxSize().alpha(fade.value)) {
                 when {
@@ -141,9 +144,7 @@ fun NowPlayingCenter(
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
-                    else -> {
-                        Box(modifier = Modifier.fillMaxSize().background(Color(0xFF2A2A32)))
-                    }
+                    // No album art: leave translucent so the home wallpaper shows through.
                 }
             }
 

@@ -76,7 +76,7 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
     var packageLabels by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     val scope = rememberCoroutineScope()
     val drawerProgress = remember { DrawerProgressController(scope) }
-    val drawerP = drawerProgress.progress.value
+    val drawerP = drawerProgress.progress
 
     val swipeUpEnabled = state.settings.swipeUpToOpenDrawer
     val showDrawerButton = !(swipeUpEnabled && state.settings.hideDrawerButton)
@@ -118,10 +118,8 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
             defaultWallpaperUri = state.settings.defaultWallpaperUri,
         )
     }
-    val artworkBitmap = remember(artKey) { viewModel.artworkBitmap() }
-    val blurredBitmap = remember(artKey) {
-        viewModel.blurredWallpaperBitmap(nowPlayingMeta.artworkBitmapKey)
-    }
+    val artworkBitmap = viewModel.artworkBitmap()
+    val blurredBitmap = viewModel.blurredWallpaperBitmap(nowPlayingMeta.artworkBitmapKey)
 
     val loadIconBitmap: suspend (ComponentName, String?, Int) -> Bitmap? = remember(viewModel) {
         { cn, custom, px -> viewModel.cachedIconBitmap(cn, custom, px) }
@@ -188,11 +186,11 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
         .homeVerticalGestures(
             enabled = homeGesturesEnabled,
             swipeUpToOpenDrawer = swipeUpEnabled,
-            isDrawerClosed = { drawerProgress.progress.value <= 0.001f },
+            isDrawerClosed = { drawerProgress.progress <= 0.001f },
             onNotificationSwipeDown = { notificationAction.value() },
             onDrawerDragStart = {
                 homeDragAccum = 0f
-                homeDragProgress = drawerProgress.progress.value
+                homeDragProgress = drawerProgress.progress
             },
             onDrawerDrag = { _, dragAmount ->
                 homeDragAccum += -dragAmount

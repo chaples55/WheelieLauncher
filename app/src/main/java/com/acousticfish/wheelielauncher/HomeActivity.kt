@@ -1,6 +1,8 @@
 package com.acousticfish.wheelielauncher
 
 import android.content.Intent
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -31,6 +33,8 @@ class HomeActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        // Let the system wallpaper show through when we aren't drawing a custom/media layer.
+        window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         setContent {
             val state by viewModel.uiState.collectAsStateWithLifecycle()
             val showStatusBar = state.settings.showStatusBar

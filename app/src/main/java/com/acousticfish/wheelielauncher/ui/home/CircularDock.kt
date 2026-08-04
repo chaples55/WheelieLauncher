@@ -2,6 +2,16 @@ package com.acousticfish.wheelielauncher.ui.home
 
 import android.content.ComponentName
 import android.graphics.Bitmap
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.StartOffset
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -15,13 +25,16 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.Stable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -37,6 +50,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.acousticfish.wheelielauncher.R
 import com.acousticfish.wheelielauncher.data.DockItem
 import com.acousticfish.wheelielauncher.ui.components.CachedAppIcon
@@ -60,7 +74,22 @@ private class DockDragState {
     var dragX by mutableFloatStateOf(0f)
     var dragY by mutableFloatStateOf(0f)
     var dragMoved by mutableStateOf(false)
+    var hoverAppIndex by mutableStateOf<Int?>(null)
+    /** Committed ring home at long-press — used for touch-slop (not preview-shifted). */
+    var originX by mutableFloatStateOf(0f)
+    var originY by mutableFloatStateOf(0f)
+
+    fun clear() {
+        draggingCn = null
+        dragMoved = false
+        hoverAppIndex = null
+    }
 }
+
+private val DockHomeSpring = spring<Float>(
+    dampingRatio = 0.72f,
+    stiffness = Spring.StiffnessMedium,
+)
 
 @Composable
 fun CircularDock(
@@ -89,10 +118,47 @@ fun CircularDock(
     var heightPx by remember { mutableIntStateOf(0) }
     var menuFor by remember { mutableStateOf<ComponentName?>(null) }
     val dragState = remember { DockDragState() }
+    // Holds preview order after drop until DataStore catches up (avoids a one-frame snap-back).
+    var pendingOrder by remember { mutableStateOf<List<DockItem>?>(null) }
 
-    val placements = remember(dockItems, slotCount, showDrawerButton) {
+    // Fixed ring geometry from committed order — used for hit-testing while dragging.
+    val basePlacements = remember(dockItems, slotCount, showDrawerButton) {
         computeFixedPlacements(dockItems, slotCount, showDrawerButton)
     }
+
+    val dragFromIndex = dragState.draggingCn?.let { cn ->
+        dockItems.indexOfFirst { it.componentName == cn }
+    }?.takeIf { it >= 0 }
+
+    val previewItems = remember(
+        dockItems,
+        dragFromIndex,
+        dragState.hoverAppIndex,
+        dragState.dragMoved,
+        pendingOrder,
+    ) {
+        val to = dragState.hoverAppIndex
+        when {
+            dragFromIndex != null && to != null && dragState.dragMoved ->
+                previewDockItems(dockItems, dragFromIndex, to)
+            pendingOrder != null -> pendingOrder!!
+            else -> dockItems
+        }
+    }
+
+    // Drop pending once the repository emits the same component order.
+    LaunchedEffect(dockItems, pendingOrder) {
+        val pending = pendingOrder ?: return@LaunchedEffect
+        if (sameDockOrder(dockItems, pending)) {
+            pendingOrder = null
+        }
+    }
+
+    val visualPlacements = remember(previewItems, slotCount, showDrawerButton) {
+        computeFixedPlacements(previewItems, slotCount, showDrawerButton)
+    }
+
+    val rearranging = dragState.draggingCn != null && dragState.dragMoved
 
     Box(
         modifier = modifier
@@ -109,35 +175,99 @@ fun CircularDock(
         val iconPx = with(density) { iconSize.toPx() }
         val touchSlop = viewConfiguration.touchSlop
 
-        placements.forEach { placement ->
-            val angleRad = Math.toRadians(placement.angleDegrees.toDouble())
-            val homeX = cx + radius * cos(angleRad).toFloat()
-            val homeY = cy + radius * sin(angleRad).toFloat()
-            DockSlotItem(
-                placement = placement,
-                homeX = homeX,
-                homeY = homeY,
-                cx = cx,
-                cy = cy,
-                iconPx = iconPx,
-                iconSize = iconSize,
-                touchSlop = touchSlop,
-                showLabels = showLabels,
-                dragState = dragState,
-                placements = placements,
-                dockItemCount = dockItems.size,
-                menuFor = menuFor,
-                onMenuForChange = { menuFor = it },
-                loadIconBitmap = loadIconBitmap,
-                peekIconBitmap = peekIconBitmap,
-                iconPackPackage = iconPackPackage,
-                resolveCustomIcon = resolveCustomIcon,
-                resolveLabel = resolveLabel,
-                onSelect = onSelect,
-                onLaunch = onLaunch,
-                onRemove = onRemove,
-                onReorder = onReorder,
-            )
+        fun homeForAngle(angleDegrees: Float): Pair<Float, Float> {
+            val angleRad = Math.toRadians(angleDegrees.toDouble())
+            return cx + radius * cos(angleRad).toFloat() to cy + radius * sin(angleRad).toFloat()
+        }
+
+        // Homes follow preview order; iteration stays on committed identities so
+        // pointerInput sessions are not restarted when hoverAppIndex changes.
+        val visualByCn = remember(visualPlacements) {
+            buildMap {
+                visualPlacements.forEach { placement ->
+                    val app = placement.slot as? DockSlot.App ?: return@forEach
+                    put(app.item.componentName, placement)
+                }
+            }
+        }
+
+        val drawerPlacement = visualPlacements.firstOrNull { it.slot is DockSlot.Drawer }
+        if (drawerPlacement != null) {
+            val (homeX, homeY) = homeForAngle(drawerPlacement.angleDegrees)
+            key("drawer") {
+                DockSlotItem(
+                    placement = drawerPlacement,
+                    homeX = homeX,
+                    homeY = homeY,
+                    cx = cx,
+                    cy = cy,
+                    radius = radius,
+                    iconPx = iconPx,
+                    iconSize = iconSize,
+                    touchSlop = touchSlop,
+                    showLabels = showLabels,
+                    dragState = dragState,
+                    hitPlacements = basePlacements,
+                    dockItems = dockItems,
+                    rearranging = rearranging,
+                    wobblePhaseMs = 0,
+                    menuFor = menuFor,
+                    onMenuForChange = { menuFor = it },
+                    loadIconBitmap = loadIconBitmap,
+                    peekIconBitmap = peekIconBitmap,
+                    iconPackPackage = iconPackPackage,
+                    resolveCustomIcon = resolveCustomIcon,
+                    resolveLabel = resolveLabel,
+                    onSelect = onSelect,
+                    onLaunch = onLaunch,
+                    onRemove = onRemove,
+                    onReorder = onReorder,
+                    onDropPreview = { from, to ->
+                        pendingOrder = previewDockItems(dockItems, from, to)
+                    },
+                    onClearPendingOrder = { pendingOrder = null },
+                )
+            }
+        }
+
+        dockItems.forEach { item ->
+            val placement = visualByCn[item.componentName] ?: return@forEach
+            val (homeX, homeY) = homeForAngle(placement.angleDegrees)
+            val phase = (item.componentName.hashCode() and 0x7fff) % 280
+            key(item.componentName) {
+                DockSlotItem(
+                    placement = placement,
+                    homeX = homeX,
+                    homeY = homeY,
+                    cx = cx,
+                    cy = cy,
+                    radius = radius,
+                    iconPx = iconPx,
+                    iconSize = iconSize,
+                    touchSlop = touchSlop,
+                    showLabels = showLabels,
+                    dragState = dragState,
+                    hitPlacements = basePlacements,
+                    dockItems = dockItems,
+                    rearranging = rearranging,
+                    wobblePhaseMs = phase,
+                    menuFor = menuFor,
+                    onMenuForChange = { menuFor = it },
+                    loadIconBitmap = loadIconBitmap,
+                    peekIconBitmap = peekIconBitmap,
+                    iconPackPackage = iconPackPackage,
+                    resolveCustomIcon = resolveCustomIcon,
+                    resolveLabel = resolveLabel,
+                    onSelect = onSelect,
+                    onLaunch = onLaunch,
+                    onRemove = onRemove,
+                    onReorder = onReorder,
+                    onDropPreview = { from, to ->
+                        pendingOrder = previewDockItems(dockItems, from, to)
+                    },
+                    onClearPendingOrder = { pendingOrder = null },
+                )
+            }
         }
     }
 }
@@ -149,13 +279,16 @@ private fun DockSlotItem(
     homeY: Float,
     cx: Float,
     cy: Float,
+    radius: Float,
     iconPx: Float,
     iconSize: androidx.compose.ui.unit.Dp,
     touchSlop: Float,
     showLabels: Boolean,
     dragState: DockDragState,
-    placements: List<Placement>,
-    dockItemCount: Int,
+    hitPlacements: List<Placement>,
+    dockItems: List<DockItem>,
+    rearranging: Boolean,
+    wobblePhaseMs: Int,
     menuFor: ComponentName?,
     onMenuForChange: (ComponentName?) -> Unit,
     loadIconBitmap: suspend (ComponentName, String?, Int) -> Bitmap?,
@@ -167,73 +300,168 @@ private fun DockSlotItem(
     onLaunch: (DockSlot) -> Unit,
     onRemove: (ComponentName) -> Unit,
     onReorder: (ComponentName, Int) -> Unit,
+    onDropPreview: (fromIndex: Int, toIndex: Int) -> Unit,
+    onClearPendingOrder: () -> Unit,
 ) {
     val appSlot = placement.slot as? DockSlot.App
     val cn = appSlot?.item?.componentName
-    // Non-dragged slots only observe draggingCn (start/end), not per-frame dragX/Y.
     val isDraggingThis = cn != null && dragState.draggingCn == cn
-    val x = if (isDraggingThis) dragState.dragX else homeX
-    val y = if (isDraggingThis) dragState.dragY else homeY
+
+    val latestPlacement by rememberUpdatedState(placement)
+    val latestHitPlacements by rememberUpdatedState(hitPlacements)
+    val latestDockItems by rememberUpdatedState(dockItems)
+    val latestOnSelect by rememberUpdatedState(onSelect)
+    val latestOnLaunch by rememberUpdatedState(onLaunch)
+    val latestOnMenuForChange by rememberUpdatedState(onMenuForChange)
+    val latestOnReorder by rememberUpdatedState(onReorder)
+    val latestOnDropPreview by rememberUpdatedState(onDropPreview)
+    val latestOnClearPendingOrder by rememberUpdatedState(onClearPendingOrder)
+
+    val springX by animateFloatAsState(
+        targetValue = homeX,
+        animationSpec = DockHomeSpring,
+        label = "dockHomeX",
+    )
+    val springY by animateFloatAsState(
+        targetValue = homeY,
+        animationSpec = DockHomeSpring,
+        label = "dockHomeY",
+    )
+
+    val x = if (isDraggingThis) dragState.dragX else springX
+    val y = if (isDraggingThis) dragState.dragY else springY
     val dragMoved = if (isDraggingThis) dragState.dragMoved else false
     val offsetX = (x - iconPx / 2f).roundToInt()
     val offsetY = (y - iconPx / 2f).roundToInt()
 
+    val wobble = rememberInfiniteTransition(label = "dockWobble")
+    val wobbleRot by wobble.animateFloat(
+        initialValue = -3.2f,
+        targetValue = 3.2f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 130, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+            initialStartOffset = StartOffset(wobblePhaseMs),
+        ),
+        label = "dockWobbleRot",
+    )
+    val wobbleScale by wobble.animateFloat(
+        initialValue = 0.97f,
+        targetValue = 1.03f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 160, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+            initialStartOffset = StartOffset(wobblePhaseMs / 2),
+        ),
+        label = "dockWobbleScale",
+    )
+    val applyWobble = rearranging && !isDraggingThis && appSlot != null
+
     Box(
         modifier = Modifier
+            .zIndex(if (isDraggingThis && dragMoved) 1f else 0f)
             .offset { IntOffset(offsetX, offsetY) }
             .graphicsLayer {
-                alpha = if (isDraggingThis && dragMoved) 0.85f else 1f
+                alpha = if (isDraggingThis && dragMoved) 0.88f else 1f
+                val scale = when {
+                    isDraggingThis && dragMoved -> 1.08f
+                    applyWobble -> wobbleScale
+                    else -> 1f
+                }
+                scaleX = scale
+                scaleY = scale
+                rotationZ = if (applyWobble) wobbleRot else 0f
             }
-            .pointerInput(placement.slot, placement.slotIndex) {
+            // Stable keys only — placement / preview changes must not cancel gestures.
+            .pointerInput(cn ?: "drawer") {
                 detectTapGestures(
                     onTap = {
-                        onSelect(placement.slotIndex)
-                        onLaunch(placement.slot)
+                        latestOnSelect(latestPlacement.slotIndex)
+                        latestOnLaunch(latestPlacement.slot)
                     },
                 )
             }
             .then(
-                if (appSlot != null) {
-                    Modifier.pointerInput(appSlot.item.componentName, placements, homeX, homeY, cx, cy) {
+                if (cn != null) {
+                    Modifier.pointerInput(cn, cx, cy, radius, touchSlop) {
                         detectDragGesturesAfterLongPress(
                             onDragStart = {
-                                onSelect(placement.slotIndex)
-                                dragState.draggingCn = appSlot.item.componentName
-                                dragState.dragX = homeX
-                                dragState.dragY = homeY
+                                latestOnClearPendingOrder()
+                                val items = latestDockItems
+                                val hits = latestHitPlacements
+                                val from = items.indexOfFirst { it.componentName == cn }
+                                val committed = hits.firstOrNull {
+                                    (it.slot as? DockSlot.App)?.item?.componentName == cn
+                                }
+                                val ang = Math.toRadians(
+                                    (committed?.angleDegrees ?: latestPlacement.angleDegrees).toDouble(),
+                                )
+                                val ox = cx + radius * cos(ang).toFloat()
+                                val oy = cy + radius * sin(ang).toFloat()
+                                latestOnSelect(latestPlacement.slotIndex)
+                                dragState.draggingCn = cn
+                                dragState.dragX = ox
+                                dragState.dragY = oy
+                                dragState.originX = ox
+                                dragState.originY = oy
                                 dragState.dragMoved = false
-                                onMenuForChange(null)
+                                dragState.hoverAppIndex = from.takeIf { it >= 0 }
+                                latestOnMenuForChange(null)
                             },
                             onDrag = { change, dragAmount ->
                                 change.consume()
                                 dragState.dragX += dragAmount.x
                                 dragState.dragY += dragAmount.y
-                                if (hypot(
-                                        (dragState.dragX - homeX).toDouble(),
-                                        (dragState.dragY - homeY).toDouble(),
+                                if (!dragState.dragMoved &&
+                                    hypot(
+                                        (dragState.dragX - dragState.originX).toDouble(),
+                                        (dragState.dragY - dragState.originY).toDouble(),
                                     ) > touchSlop
                                 ) {
                                     dragState.dragMoved = true
                                 }
+                                if (dragState.dragMoved) {
+                                    val angle = angleFromAtan(
+                                        atan2(dragState.dragY - cy, dragState.dragX - cx) *
+                                            (180f / PI.toFloat()),
+                                    )
+                                    val target = nearestAppSlotIndex(
+                                        angle,
+                                        latestHitPlacements,
+                                        latestDockItems.size,
+                                    )
+                                    if (target != null) {
+                                        dragState.hoverAppIndex = target
+                                    }
+                                }
                             },
                             onDragEnd = {
                                 if (!dragState.dragMoved) {
-                                    onMenuForChange(appSlot.item.componentName)
+                                    latestOnMenuForChange(cn)
                                 } else {
-                                    val angle = angleFromAtan(
-                                        atan2(dragState.dragY - cy, dragState.dragX - cx) * (180f / PI.toFloat()),
-                                    )
-                                    val target = nearestAppSlotIndex(angle, placements, dockItemCount)
-                                    if (target != null) {
-                                        onReorder(appSlot.item.componentName, target)
+                                    val items = latestDockItems
+                                    val from = items.indexOfFirst { it.componentName == cn }
+                                    val target = dragState.hoverAppIndex
+                                        ?: nearestAppSlotIndex(
+                                            angleFromAtan(
+                                                atan2(
+                                                    dragState.dragY - cy,
+                                                    dragState.dragX - cx,
+                                                ) * (180f / PI.toFloat()),
+                                            ),
+                                            latestHitPlacements,
+                                            items.size,
+                                        )
+                                    if (target != null && from >= 0) {
+                                        latestOnDropPreview(from, target)
+                                        latestOnReorder(cn, target)
                                     }
                                 }
-                                dragState.draggingCn = null
-                                dragState.dragMoved = false
+                                dragState.clear()
                             },
                             onDragCancel = {
-                                dragState.draggingCn = null
-                                dragState.dragMoved = false
+                                latestOnClearPendingOrder()
+                                dragState.clear()
                             },
                         )
                     }
@@ -309,6 +537,25 @@ private data class Placement(
     val slot: DockSlot,
 )
 
+/** Same insert semantics as [com.acousticfish.wheelielauncher.data.DockRepository.moveToAngleIndex]. */
+private fun previewDockItems(
+    items: List<DockItem>,
+    fromIndex: Int,
+    toIndex: Int,
+): List<DockItem> {
+    if (fromIndex !in items.indices) return items
+    val mutable = items.toMutableList()
+    val item = mutable.removeAt(fromIndex)
+    val insertAt = toIndex.coerceIn(0, mutable.size)
+    mutable.add(insertAt, item)
+    return mutable
+}
+
+private fun sameDockOrder(a: List<DockItem>, b: List<DockItem>): Boolean {
+    if (a.size != b.size) return false
+    return a.indices.all { a[it].componentName == b[it].componentName }
+}
+
 /** Fixed ring positions. When [includeDrawer] is true, drawer sits at bottom (90°). */
 private fun computeFixedPlacements(
     dockItems: List<DockItem>,
@@ -353,11 +600,7 @@ private fun nearestAppSlotIndex(
     return when (val slot = best.slot) {
         is DockSlot.App -> slot.appIndex
         is DockSlot.Empty -> {
-            // Empty slots exist only when the drawer button is shown.
-            val appSlotIndex = placements.indexOfFirst { it.slot is DockSlot.Empty }.let {
-                (best.slotIndex - 1).coerceIn(0, appCount - 1)
-            }
-            appSlotIndex
+            (best.slotIndex - 1).coerceIn(0, appCount - 1)
         }
         else -> null
     }

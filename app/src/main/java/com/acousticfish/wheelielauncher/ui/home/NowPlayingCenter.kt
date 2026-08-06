@@ -379,9 +379,9 @@ private fun MarqueeLabel(
             overflow = TextOverflow.Visible,
             onTextLayout = { textWidthPx = it.size.width.toFloat() },
             modifier = Modifier
-                .wrapContentWidth(unbounded = true)
                 .align(Alignment.CenterStart)
-                .offset { IntOffset(scrollX.roundToInt(), 0) },
+                .offset { IntOffset(scrollX.roundToInt(), 0) }
+                .wrapContentWidth(align = Alignment.Start, unbounded = true),
             style = TextStyle(
                 color = Color.White,
                 fontSize = fontSize,

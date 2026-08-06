@@ -47,6 +47,10 @@ Instead of a dense grid of apps, Wheelie puts now-playing front and center, with
 
 **AcousticFish**
 
+## Privacy
+
+Wheelie does not collect user data. Everything stays on your device. See the [Privacy Policy](PRIVACY.md).
+
 ---
 
 *Wheelie Launcher — home screen for listening.*

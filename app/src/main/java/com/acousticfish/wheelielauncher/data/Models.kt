@@ -29,7 +29,7 @@ data class LauncherSettings(
     val drawerColumns: Int = 4,
     /** When true, show a search field at the top of the app drawer. */
     val drawerShowSearch: Boolean = true,
-    val showStatusBar: Boolean = true,
+    val showStatusBar: Boolean = false,
     val statusBarScrimOpacity: Float = 0.4f,
     val defaultWallpaperUri: String? = null,
     val iconPackPackage: String? = null,
@@ -39,26 +39,30 @@ data class LauncherSettings(
     val onboardingHomeDone: Boolean = false,
     val onboardingMediaDone: Boolean = false,
     /** Diameter of the center Now Playing widget in dp. */
-    val nowPlayingSizeDp: Float = 120f,
+    val nowPlayingSizeDp: Float = 200f,
     /** Ring radius as a fraction of the shorter screen half (0.45–0.92). */
     val dockRingRadiusFraction: Float = 0.78f,
     /** Swipe up on the home screen opens the app drawer (Murine-style). */
-    val swipeUpToOpenDrawer: Boolean = false,
+    val swipeUpToOpenDrawer: Boolean = true,
     /** Hide the dock drawer button; only applies when [swipeUpToOpenDrawer] is true. */
     val hideDrawerButton: Boolean = false,
     /**
      * Drawer swipe sensitivity multiplier.
-     * 1.0 = current default commit distance; 0.25 = less sensitive; 2.0 = more sensitive.
+     * 1.0 = baseline commit distance; lower = less sensitive; higher = more sensitive.
      */
-    val swipeSensitivity: Float = 1f,
+    val swipeSensitivity: Float = 2f,
     /** Show a floating clock in the top-right corner of home. */
     val showClock: Boolean = true,
+    /** Floating clock text size in sp. */
+    val clockSizeSp: Float = 22f,
     /** Show an equalizer shortcut in the top-left corner. */
-    val showEqButton: Boolean = false,
+    val showEqButton: Boolean = true,
     /** Flattened [ComponentName] of the EQ / audio app to launch, or null. */
     val eqAppComponent: String? = null,
     /** Show previous/next media skip buttons in the bottom corners. */
     val showSkipButtons: Boolean = false,
+    /** Icon size for EQ / skip chrome controls in dp. */
+    val chromeControlSizeDp: Float = 26f,
     /** Dark scrim over the fixed home wallpaper while the drawer is open. */
     val drawerBackgroundOpacity: Float = 0.45f,
     /** Now Playing progress / battery arc stroke width in dp. */
@@ -67,6 +71,11 @@ data class LauncherSettings(
     val showBatteryBar: Boolean = true,
     /** Show scrolling artist / title around the play button. */
     val showTrackInfo: Boolean = true,
+    /**
+     * Marquee scroll speed relative to the original baseline.
+     * 1.0 = original (max), 0.5 = half (default), 0.25 = quarter (min).
+     */
+    val marqueeSpeed: Float = 0.5f,
 )
 
 data class NowPlayingState(

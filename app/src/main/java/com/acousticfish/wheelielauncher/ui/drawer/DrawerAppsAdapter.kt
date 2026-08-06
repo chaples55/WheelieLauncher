@@ -5,8 +5,9 @@ import android.graphics.Bitmap
 import android.graphics.drawable.ColorDrawable
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.ContextThemeWrapper
+import android.view.Gravity
 import android.view.LayoutInflater
-import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
@@ -28,7 +29,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.abs
 
 private const val TYPE_HEADER = 0
 private const val TYPE_SEARCH = 1
@@ -62,8 +62,9 @@ class DrawerAppsAdapter(
     var onAppInfo: (String) -> Unit,
     var onHide: (String) -> Unit,
     var onUninstall: (String) -> Unit,
-    var onOpenSettings: () -> Unit,
+    var onOpenSettings: () -> Unit = {},
     var onQueryChanged: (String) -> Unit,
+    var onAppLongClick: (LauncherApp) -> Unit = {},
 ) : ListAdapter<DrawerListItem, RecyclerView.ViewHolder>(Diff) {
 
     var config: DrawerBindConfig = DrawerBindConfig(
@@ -152,29 +153,6 @@ class DrawerAppsAdapter(
         super.onViewRecycled(holder)
     }
 
-    private fun showMenu(anchor: View, app: LauncherApp) {
-        PopupMenu(anchor.context, anchor).apply {
-            menu.add(0, 1, 0, R.string.add_to_dock)
-            menu.add(0, 2, 1, R.string.change_label)
-            menu.add(0, 3, 2, R.string.change_icon)
-            menu.add(0, 4, 3, R.string.app_info)
-            menu.add(0, 5, 4, R.string.hide_app)
-            menu.add(0, 6, 5, R.string.uninstall)
-            setOnMenuItemClickListener { item ->
-                when (item.itemId) {
-                    1 -> onAddToDock(app.componentName)
-                    2 -> onChangeLabel(app.componentName)
-                    3 -> onChangeIcon(app.componentName)
-                    4 -> onAppInfo(app.packageName)
-                    5 -> onHide(app.packageName)
-                    6 -> onUninstall(app.packageName)
-                }
-                true
-            }
-            show()
-        }
-    }
-
     class HeaderHolder(view: View) : RecyclerView.ViewHolder(view) {
         val settings: ImageButton = view.findViewById(R.id.drawer_header_settings)
     }
@@ -261,7 +239,7 @@ class DrawerAppsAdapter(
 
             itemView.setOnClickListener { onLaunch(app.componentName) }
             itemView.setOnLongClickListener {
-                showMenu(it, app)
+                onAppLongClick(app)
                 true
             }
         }
@@ -279,107 +257,6 @@ class DrawerAppsAdapter(
 
         override fun areContentsTheSame(oldItem: DrawerListItem, newItem: DrawerListItem): Boolean =
             oldItem == newItem
-    }
-}
-
-/**
- * RecyclerView that reports downward overscroll at the top so the drawer can dismiss.
- * [onPullChanged] receives pull distance in px; [onPullEnd] receives (pullPx, velocityY px/ms).
- * Positive velocityY = finger moving down.
- *
- * Uses [MotionEvent.getRawY] so pull tracking stays stable while the parent sheet
- * translates under the finger (view-local Y would feedback and jitter).
- */
-class PullDismissRecyclerView @JvmOverloads constructor(
-    context: android.content.Context,
-    attrs: android.util.AttributeSet? = null,
-) : RecyclerView(context, attrs) {
-    var pullOffsetPx: Float = 0f
-        private set
-    var onPullChanged: ((Float) -> Unit)? = null
-    var onPullEnd: ((Float, Float) -> Unit)? = null
-
-    private var trackingPull = false
-    private var lastRawY = 0f
-    private var velocityTracker: android.view.VelocityTracker? = null
-
-    fun resetPull() {
-        // Do not notify listeners — that would snap drawer progress back to open.
-        pullOffsetPx = 0f
-        trackingPull = false
-        recycleVelocityTracker()
-    }
-
-    private fun ensureVelocityTracker() {
-        if (velocityTracker == null) velocityTracker = android.view.VelocityTracker.obtain()
-    }
-
-    private fun recycleVelocityTracker() {
-        velocityTracker?.recycle()
-        velocityTracker = null
-    }
-
-    override fun onInterceptTouchEvent(e: MotionEvent): Boolean {
-        when (e.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                lastRawY = e.rawY
-                ensureVelocityTracker()
-                velocityTracker?.clear()
-                velocityTracker?.addMovement(e)
-                if (pullOffsetPx > 0f) {
-                    trackingPull = true
-                    return true
-                }
-            }
-            MotionEvent.ACTION_MOVE -> {
-                velocityTracker?.addMovement(e)
-                val dy = e.rawY - lastRawY
-                if (!trackingPull && !canScrollVertically(-1) && dy > 4f) {
-                    trackingPull = true
-                    lastRawY = e.rawY
-                    parent?.requestDisallowInterceptTouchEvent(true)
-                    return true
-                }
-            }
-        }
-        return super.onInterceptTouchEvent(e)
-    }
-
-    override fun onTouchEvent(e: MotionEvent): Boolean {
-        ensureVelocityTracker()
-        velocityTracker?.addMovement(e)
-        when (e.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                lastRawY = e.rawY
-            }
-            MotionEvent.ACTION_MOVE -> {
-                if (trackingPull || pullOffsetPx > 0f) {
-                    val dy = e.rawY - lastRawY
-                    lastRawY = e.rawY
-                    if (!canScrollVertically(-1) || pullOffsetPx > 0f) {
-                        trackingPull = true
-                        pullOffsetPx = (pullOffsetPx + dy).coerceAtLeast(0f)
-                        onPullChanged?.invoke(pullOffsetPx)
-                        return true
-                    }
-                } else {
-                    lastRawY = e.rawY
-                }
-            }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                if (trackingPull || pullOffsetPx > 0f) {
-                    velocityTracker?.computeCurrentVelocity(1000) // px/s
-                    val vyPxPerMs = (velocityTracker?.yVelocity ?: 0f) / 1000f
-                    onPullEnd?.invoke(pullOffsetPx, vyPxPerMs)
-                    trackingPull = false
-                    lastRawY = e.rawY
-                    recycleVelocityTracker()
-                    return true
-                }
-                recycleVelocityTracker()
-            }
-        }
-        return super.onTouchEvent(e)
     }
 }
 

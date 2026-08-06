@@ -102,8 +102,11 @@ class LauncherViewModel(private val container: AppContainer) : ViewModel() {
 
     init {
         viewModelScope.launch {
-            container.installedAppsRepository.refresh()
+            val apps = container.installedAppsRepository.refresh()
             container.dockRepository.ensureSeeded()
+            container.settingsRepository.seedEqAppIfNeeded {
+                preferredEqComponentKey(apps)
+            }
         }
         container.mediaSessionRepository.start()
         viewModelScope.launch {
@@ -353,6 +356,18 @@ class LauncherViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     companion object {
+        private val PreferredEqPackages = listOf(
+            "com.pittvandewitt.wavelet",
+            "com.maxmpz.equalizer",
+        )
+
+        fun preferredEqComponentKey(apps: List<LauncherApp>): String? {
+            for (pkg in PreferredEqPackages) {
+                apps.firstOrNull { it.packageName == pkg }?.let { return it.componentName.key() }
+            }
+            return null
+        }
+
         fun slotCountFor(appCount: Int, includeDrawer: Boolean = true): Int =
             if (includeDrawer) {
                 (appCount + 1).coerceIn(DockRepository.MIN_SLOTS, DockRepository.MAX_DOCK_SLOTS)

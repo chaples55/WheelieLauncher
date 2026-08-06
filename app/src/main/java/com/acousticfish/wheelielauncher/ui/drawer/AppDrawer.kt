@@ -6,7 +6,9 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -106,7 +108,7 @@ fun AppDrawerHost(
     val height = progressController.panelHeightPx
     val translation = if (height > 0f) drawerTranslationY(progress, height) else 0f
     val contentAlpha = DrawerProgressController.drawerContentAlpha(progress)
-    val interactive = progress > 0.02f
+    val interactive = progress > 0.001f
 
     Box(
         modifier = modifier
@@ -188,6 +190,7 @@ fun AppDrawer(
     modifier: Modifier = Modifier,
 ) {
     BackHandler(enabled = touchEnabled, onBack = onDismiss)
+    var menuApp by remember { mutableStateOf<LauncherApp?>(null) }
     var renameApp by remember { mutableStateOf<LauncherApp?>(null) }
     var renameText by remember { mutableStateOf("") }
     var query by remember { mutableStateOf("") }
@@ -250,6 +253,7 @@ fun AppDrawer(
             onUninstall = onUninstall,
             onOpenSettings = onOpenSettings,
             onQueryChanged = { q -> query = q },
+            onAppLongClick = { app -> menuApp = app },
         )
     }
 
@@ -272,8 +276,9 @@ fun AppDrawer(
         adapter.onAppInfo = onAppInfo
         adapter.onHide = onHide
         adapter.onUninstall = onUninstall
-        adapter.onOpenSettings = onOpenSettings
+        adapter.onOpenSettings = { onOpenSettings() }
         adapter.onQueryChanged = { q -> query = q }
+        adapter.onAppLongClick = { app -> menuApp = app }
     }
     LaunchedEffect(peekIconBitmap, loadIconBitmap) {
         adapter.updateIconLoaders(peekIconBitmap, loadIconBitmap)
@@ -336,13 +341,93 @@ fun AppDrawer(
                 onPullEndState.value(amount, velocity)
                 rv.resetPull()
             }
-            // GONE while closed so the mounted RV cannot steal home-screen swipes.
+            // INVISIBLE (not GONE) while closed so home swipes aren't stolen, but mid-dismiss
+            // pulls don't destroy the touch stream by flipping GONE under the finger.
             val enable = touchEnabledState.value
-            rv.visibility = if (enable) View.VISIBLE else View.GONE
+            rv.visibility = if (enable) View.VISIBLE else View.INVISIBLE
             rv.isEnabled = enable
-        },
+            rv.isClickable = enable
+            rv.isFocusable = enable        },
         modifier = modifier.fillMaxSize(),
     )
+
+    menuApp?.let { app ->
+        val appLabel = displayLabels[app.componentName.key()] ?: app.label
+        AlertDialog(
+            onDismissRequest = { menuApp = null },
+            title = { Text(appLabel) },
+            text = {
+                Column {
+                    TextButton(
+                        onClick = {
+                            val a = menuApp ?: app
+                            menuApp = null
+                            onAddToDock(a.componentName)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.add_to_dock))
+                    }
+                    TextButton(
+                        onClick = {
+                            val a = menuApp ?: app
+                            menuApp = null
+                            renameApp = a
+                            renameText = displayLabels[a.componentName.key()] ?: a.label
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.change_label))
+                    }
+                    TextButton(
+                        onClick = {
+                            val a = menuApp ?: app
+                            menuApp = null
+                            onChangeIcon(a.componentName)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.change_icon))
+                    }
+                    TextButton(
+                        onClick = {
+                            val a = menuApp ?: app
+                            menuApp = null
+                            onAppInfo(a.packageName)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.app_info))
+                    }
+                    TextButton(
+                        onClick = {
+                            val a = menuApp ?: app
+                            menuApp = null
+                            onHide(a.packageName)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.hide_app))
+                    }
+                    TextButton(
+                        onClick = {
+                            val a = menuApp ?: app
+                            menuApp = null
+                            onUninstall(a.packageName)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.uninstall))
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { menuApp = null }) {
+                    Text(stringResource(R.string.back))
+                }
+            },
+        )
+    }
 
     renameApp?.let { app ->
         AlertDialog(

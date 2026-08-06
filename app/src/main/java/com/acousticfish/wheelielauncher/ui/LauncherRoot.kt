@@ -7,13 +7,17 @@ import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsTopHeight
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -73,6 +77,7 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
     val app = context.applicationContext as WheelieApp
     var iconPickerFor by remember { mutableStateOf<ComponentName?>(null) }
     var showHidden by remember { mutableStateOf(false) }
+    var showEqPicker by remember { mutableStateOf(false) }
     var packageLabels by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     val scope = rememberCoroutineScope()
     val drawerProgress = remember { DrawerProgressController(scope) }
@@ -148,7 +153,15 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
     val onPlayPause = remember(viewModel) { { viewModel.togglePlayPause() } }
     val onSkipPrevious = remember(viewModel) { { viewModel.skipToPrevious() } }
     val onSkipNext = remember(viewModel) { { viewModel.skipToNext() } }
-    val onEqClick = remember(viewModel) { { viewModel.launchEqApp() } }
+    val onEqClick = remember(viewModel) {
+        {
+            if (viewModel.uiState.value.settings.eqAppComponent.isNullOrBlank()) {
+                showEqPicker = true
+            } else {
+                viewModel.launchEqApp()
+            }
+        }
+    }
     val ensureBlurred: suspend (String, Bitmap) -> Bitmap? = remember(viewModel) {
         { key, bmp -> viewModel.ensureBlurredWallpaper(key, bmp) }
     }
@@ -174,7 +187,7 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
     var homeDragProgress by remember { mutableFloatStateOf(0f) }
     var homeMenuAt by remember { mutableStateOf<Offset?>(null) }
     val showStatusBar = state.settings.showStatusBar
-    val homeGesturesEnabled = !overlaysBlockingHome
+    val homeGesturesEnabled = !overlaysBlockingHome && !state.drawerOpen
     val notificationAction = rememberUpdatedState {
         handleHomeSwipeDown(
             context = context,
@@ -289,6 +302,7 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
                 progressStrokeDp = state.settings.progressBarThicknessDp,
                 showBatteryBar = state.settings.showBatteryBar,
                 showTrackInfo = state.settings.showTrackInfo,
+                marqueeSpeed = state.settings.marqueeSpeed,
                 onOpenApp = onOpenNowPlaying,
                 onPlayPause = onPlayPause,
             )
@@ -297,6 +311,8 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
                 showClock = state.settings.showClock,
                 showEqButton = state.settings.showEqButton,
                 showSkipButtons = state.settings.showSkipButtons,
+                clockSizeSp = state.settings.clockSizeSp,
+                chromeControlSizeDp = state.settings.chromeControlSizeDp,
                 onEqClick = onEqClick,
                 onSkipPrevious = onSkipPrevious,
                 onSkipNext = onSkipNext,
@@ -423,6 +439,50 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
                     iconPickerFor = null
                 },
                 onBack = { iconPickerFor = null },
+            )
+        }
+
+        if (showEqPicker) {
+            AlertDialog(
+                onDismissRequest = { showEqPicker = false },
+                title = { Text(stringResource(R.string.eq_target_app)) },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .heightIn(max = 420.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        state.apps.forEach { app ->
+                            TextButton(
+                                onClick = {
+                                    viewModel.updateSettings { repo ->
+                                        repo.setEqAppComponent(app.componentName.key())
+                                    }
+                                    showEqPicker = false
+                                    viewModel.launch(app.componentName)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(app.label)
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showEqPicker = false }) {
+                        Text(stringResource(android.R.string.cancel))
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.updateSettings { it.setEqAppComponent(null) }
+                            showEqPicker = false
+                        },
+                    ) {
+                        Text(stringResource(R.string.not_set))
+                    }
+                },
             )
         }
 

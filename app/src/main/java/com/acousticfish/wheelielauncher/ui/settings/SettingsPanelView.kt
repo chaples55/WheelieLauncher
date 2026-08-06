@@ -53,13 +53,16 @@ class SettingsPanelView @JvmOverloads constructor(
 
     private var dockIconSize = 48f
     private var dockRing = 0.78f
-    private var nowPlayingSize = 120f
+    private var nowPlayingSize = 200f
     private var drawerColumns = 4
     private var drawerIconSize = 48f
     private var statusScrim = 0.4f
-    private var swipeSensitivity = 1f
+    private var swipeSensitivity = 2f
     private var drawerBgOpacity = 0.45f
     private var progressThickness = 4f
+    private var clockSize = 22f
+    private var chromeControlSize = 26f
+    private var marqueeSpeed = 0.5f
 
     init {
         LayoutInflater.from(context).inflate(R.layout.settings_panel, this, true)
@@ -94,6 +97,9 @@ class SettingsPanelView @JvmOverloads constructor(
         swipeSensitivity = settings.swipeSensitivity
         drawerBgOpacity = settings.drawerBackgroundOpacity
         progressThickness = settings.progressBarThicknessDp
+        clockSize = settings.clockSizeSp
+        chromeControlSize = settings.chromeControlSizeDp
+        marqueeSpeed = settings.marqueeSpeed
         showPage(page)
     }
 
@@ -273,11 +279,43 @@ class SettingsPanelView @JvmOverloads constructor(
         }
         switchRow(context.getString(R.string.show_track_info), settings.showTrackInfo) {
             host?.onUpdate { repo -> repo.setShowTrackInfo(it) }
+            showPage(Page.HOME)
+        }
+        if (settings.showTrackInfo) {
+            sliderRow(
+                initialLabel = marqueeSpeedLabel(marqueeSpeed),
+                value = marqueeSpeed,
+                min = 0.25f,
+                max = 1f,
+                steps = 0,
+                onLabel = { marqueeSpeedLabel(it) },
+                onCommit = {
+                    marqueeSpeed = it
+                    host?.onUpdate { repo -> repo.setMarqueeSpeed(it) }
+                },
+                onLive = { marqueeSpeed = it },
+            )
         }
 
         section("Chrome")
         switchRow(context.getString(R.string.show_clock), settings.showClock) {
             host?.onUpdate { repo -> repo.setShowClock(it) }
+            showPage(Page.HOME)
+        }
+        if (settings.showClock) {
+            sliderRow(
+                initialLabel = "${context.getString(R.string.clock_size)} (${clockSize.toInt()} sp)",
+                value = clockSize,
+                min = 14f,
+                max = 48f,
+                steps = 0,
+                onLabel = { "${context.getString(R.string.clock_size)} (${it.toInt()} sp)" },
+                onCommit = {
+                    clockSize = it
+                    host?.onUpdate { repo -> repo.setClockSizeSp(it) }
+                },
+                onLive = { clockSize = it },
+            )
         }
         switchRow(context.getString(R.string.show_eq_button), settings.showEqButton) {
             host?.onUpdate { repo -> repo.setShowEqButton(it) }
@@ -290,14 +328,22 @@ class SettingsPanelView @JvmOverloads constructor(
         }
         switchRow(context.getString(R.string.show_skip_buttons), settings.showSkipButtons) {
             host?.onUpdate { repo -> repo.setShowSkipButtons(it) }
+            showPage(Page.HOME)
         }
-
-        section("Wallpaper")
-        navRow(
-            context.getString(R.string.default_wallpaper),
-            if (settings.defaultWallpaperUri != null) "Custom image set" else "System wallpaper",
-        ) {
-            onPickWallpaper?.invoke()
+        if (settings.showEqButton || settings.showSkipButtons) {
+            sliderRow(
+                initialLabel = "${context.getString(R.string.chrome_control_size)} (${chromeControlSize.toInt()} dp)",
+                value = chromeControlSize,
+                min = 18f,
+                max = 48f,
+                steps = 0,
+                onLabel = { "${context.getString(R.string.chrome_control_size)} (${it.toInt()} dp)" },
+                onCommit = {
+                    chromeControlSize = it
+                    host?.onUpdate { repo -> repo.setChromeControlSizeDp(it) }
+                },
+                onLive = { chromeControlSize = it },
+            )
         }
     }
 
@@ -321,7 +367,7 @@ class SettingsPanelView @JvmOverloads constructor(
             initialLabel = swipeSensitivityLabelText(swipeSensitivity),
             value = swipeSensitivity,
             min = 0.25f,
-            max = 2f,
+            max = 3f,
             steps = 0,
             onLabel = { swipeSensitivityLabelText(it) },
             onCommit = {
@@ -392,6 +438,14 @@ class SettingsPanelView @JvmOverloads constructor(
             },
             onLive = { statusScrim = it },
         )
+
+        section("Wallpaper")
+        navRow(
+            context.getString(R.string.default_wallpaper),
+            if (settings.defaultWallpaperUri != null) "Custom image set" else "System wallpaper",
+        ) {
+            onPickWallpaper?.invoke()
+        }
 
         section("Icons")
         navRow("Icon pack", iconPackLabel()) {
@@ -466,6 +520,9 @@ class SettingsPanelView @JvmOverloads constructor(
 
     private fun swipeSensitivityLabelText(value: Float): String =
         "${context.getString(R.string.swipe_sensitivity)} (${String.format("%.2f", value)}×)"
+
+    private fun marqueeSpeedLabel(value: Float): String =
+        "${context.getString(R.string.marquee_speed)} (${(value * 100).toInt()}%)"
 
     private fun drawerBgOpacityLabel(value: Float): String =
         "${context.getString(R.string.drawer_background_opacity)} (${(value * 100).toInt()}%)"

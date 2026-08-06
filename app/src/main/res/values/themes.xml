@@ -9,5 +9,18 @@
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:colorBackground">@android:color/transparent</item>
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="android:popupMenuStyle">@style/WheeliePopupMenu</item>
+    </style>
+
+    <style name="WheeliePopupMenu" parent="@android:style/Widget.Material.PopupMenu">
+        <item name="android:popupBackground">@drawable/popup_menu_background</item>
+    </style>
+
+    <!-- PopupMenu must not inherit the transparent wallpaper activity theme. -->
+    <style name="Theme.WheelieLauncher.PopupOverlay" parent="android:Theme.Material.Light">
+        <item name="android:popupMenuStyle">@style/WheeliePopupMenu</item>
+        <item name="android:colorBackground">#FF2A2A2E</item>
+        <item name="android:textColorPrimary">#FFFFFFFF</item>
+        <item name="android:textColorSecondary">#FFCCCCCC</item>
     </style>
 </resources>

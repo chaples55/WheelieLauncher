@@ -45,7 +45,7 @@ class DrawerProgressController(
     }
 
     fun updateSwipeSensitivity(sensitivity: Float) {
-        val s = sensitivity.coerceIn(0.25f, 2f)
+        val s = sensitivity.coerceIn(0.25f, 3f)
         // Higher sensitivity → shorter swipe to commit.
         commitDistance = (BASE_COMMIT_DISTANCE / s).coerceIn(0.05f, 0.8f)
     }

@@ -25,6 +25,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.acousticfish.wheelielauncher.R
@@ -38,12 +40,18 @@ fun BoxScope.HomeChromeOverlays(
     showClock: Boolean,
     showEqButton: Boolean,
     showSkipButtons: Boolean,
+    clockSizeSp: Float,
+    chromeControlSizeDp: Float,
     onEqClick: () -> Unit,
     onSkipPrevious: () -> Unit,
     onSkipNext: () -> Unit,
     onClockClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val iconSize = chromeControlSizeDp.dp
+    val hitSize = (chromeControlSizeDp * 1.85f).dp.coerceAtLeast(40.dp)
+    val clockSp = clockSizeSp.sp
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -54,6 +62,8 @@ fun BoxScope.HomeChromeOverlays(
             ChromeIconButton(
                 drawable = R.drawable.equalizer_24,
                 contentDescription = stringResource(R.string.eq_shortcut),
+                iconSize = iconSize,
+                hitSize = hitSize,
                 onClick = onEqClick,
                 modifier = Modifier.align(Alignment.TopStart),
             )
@@ -61,6 +71,7 @@ fun BoxScope.HomeChromeOverlays(
 
         if (showClock) {
             FloatingClock(
+                fontSize = clockSp,
                 onClick = onClockClick,
                 modifier = Modifier.align(Alignment.TopEnd),
             )
@@ -70,12 +81,16 @@ fun BoxScope.HomeChromeOverlays(
             ChromeIconButton(
                 drawable = R.drawable.skip_previous_24,
                 contentDescription = stringResource(R.string.skip_previous),
+                iconSize = iconSize,
+                hitSize = hitSize,
                 onClick = onSkipPrevious,
                 modifier = Modifier.align(Alignment.BottomStart),
             )
             ChromeIconButton(
                 drawable = R.drawable.skip_next_24,
                 contentDescription = stringResource(R.string.skip_next),
+                iconSize = iconSize,
+                hitSize = hitSize,
                 onClick = onSkipNext,
                 modifier = Modifier.align(Alignment.BottomEnd),
             )
@@ -85,6 +100,7 @@ fun BoxScope.HomeChromeOverlays(
 
 @Composable
 private fun FloatingClock(
+    fontSize: TextUnit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -108,7 +124,7 @@ private fun FloatingClock(
             .padding(top = 4.dp, end = 2.dp, start = 8.dp, bottom = 8.dp),
         style = TextStyle(
             color = Color.White,
-            fontSize = 22.sp,
+            fontSize = fontSize,
             fontWeight = FontWeight.Medium,
             shadow = Shadow(
                 color = Color.Black.copy(alpha = 0.55f),
@@ -122,15 +138,17 @@ private fun FloatingClock(
 private fun ChromeIconButton(
     drawable: Int,
     contentDescription: String,
+    iconSize: Dp,
+    hitSize: Dp,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier
-            .size(48.dp)
+            .size(hitSize)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(bounded = false, radius = 24.dp),
+                indication = ripple(bounded = false, radius = hitSize / 2),
                 onClick = onClick,
             ),
         contentAlignment = Alignment.Center,
@@ -139,7 +157,7 @@ private fun ChromeIconButton(
             painter = painterResource(drawable),
             contentDescription = contentDescription,
             tint = Color.White,
-            modifier = Modifier.size(26.dp),
+            modifier = Modifier.size(iconSize),
         )
     }
 }

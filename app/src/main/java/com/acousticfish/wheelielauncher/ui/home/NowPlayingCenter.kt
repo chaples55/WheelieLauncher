@@ -18,9 +18,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -34,7 +36,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
@@ -60,6 +61,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -72,7 +74,7 @@ import com.acousticfish.wheelielauncher.data.PlaybackProgress
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.max
-
+import kotlin.math.roundToInt
 @Composable
 fun NowPlayingCenter(
     meta: NowPlayingMeta,
@@ -82,6 +84,7 @@ fun NowPlayingCenter(
     progressStrokeDp: Float,
     showBatteryBar: Boolean,
     showTrackInfo: Boolean,
+    marqueeSpeed: Float = 0.5f,
     onOpenApp: () -> Unit,
     onPlayPause: () -> Unit,
     modifier: Modifier = Modifier,
@@ -173,6 +176,7 @@ fun NowPlayingCenter(
                     maxWidth = labelMaxWidth,
                     fontSize = labelSize,
                     fontWeight = FontWeight.Medium,
+                    speed = marqueeSpeed,
                 )
             }
 
@@ -201,6 +205,7 @@ fun NowPlayingCenter(
                     maxWidth = labelMaxWidth,
                     fontSize = labelSize,
                     fontWeight = FontWeight.SemiBold,
+                    speed = marqueeSpeed,
                 )
             }
         }
@@ -292,40 +297,55 @@ private fun MarqueeLabel(
     maxWidth: Dp,
     fontSize: TextUnit,
     fontWeight: FontWeight,
+    speed: Float,
 ) {
     val density = LocalDensity.current
     var containerWidthPx by remember { mutableFloatStateOf(0f) }
     var textWidthPx by remember(text, fontSize) { mutableFloatStateOf(0f) }
-    val needsScroll = containerWidthPx > 0f && textWidthPx > containerWidthPx + 1f
-    val offset = remember { Animatable(0f) }
-    val edgeFadePx = with(density) { 18.dp.toPx() }
+    
+    // Half of the previous paddings:
+    val edgeFadeDp = 10.dp
+    val edgeFadePx = with(density) { edgeFadeDp.toPx() }
+    val insetDp = 6.dp
+    val insetPx = with(density) { insetDp.toPx() }
 
-    LaunchedEffect(text, needsScroll, textWidthPx, containerWidthPx) {
+    val startX = edgeFadePx + insetPx
+    val targetEnd = (containerWidthPx - edgeFadePx - insetPx).coerceAtLeast(startX)
+    val clearWidth = (containerWidthPx - 2 * edgeFadePx).coerceAtLeast(0f)
+
+    // Only scroll if text exceeds the full widget container width.
+    val needsScroll = containerWidthPx > 0f && textWidthPx > containerWidthPx
+    val travel = if (needsScroll) {
+        (startX + textWidthPx - targetEnd).coerceAtLeast(1f)
+    } else {
+        0f
+    }
+    val offset = remember { Animatable(0f) }
+    val speedFactor = speed.coerceIn(0.25f, 1f)
+
+    LaunchedEffect(text, needsScroll, travel, speedFactor) {
         offset.snapTo(0f)
         if (!needsScroll) return@LaunchedEffect
-        val travel = (textWidthPx - containerWidthPx).coerceAtLeast(1f)
+        val durationMs = max(
+            (2_400f / speedFactor).toInt(),
+            (travel * 28f / speedFactor).toInt(),
+        )
         while (true) {
-            delay(1_000)
+            delay(1_200)
             offset.animateTo(
                 -travel,
-                animationSpec = tween(
-                    durationMillis = max(2_400, (travel * 14f).toInt()),
-                    easing = LinearEasing,
-                ),
+                animationSpec = tween(durationMillis = durationMs, easing = LinearEasing),
             )
-            delay(1_000)
+            delay(1_200)
             offset.snapTo(0f)
         }
     }
 
-    // Always layout from the start so overflowing text's left edge is at x=0.
-    // Short labels are centered with an explicit translation instead.
-    val baseTranslationX = if (needsScroll) {
-        offset.value
-    } else if (containerWidthPx > 0f && textWidthPx > 0f) {
-        ((containerWidthPx - textWidthPx) / 2f).coerceAtLeast(0f)
-    } else {
-        0f
+    val scrollX = when {
+        needsScroll -> startX + offset.value
+        containerWidthPx > 0f && textWidthPx > 0f ->
+            ((containerWidthPx - textWidthPx) / 2f).coerceAtLeast(0f)
+        else -> 0f
     }
 
     Box(
@@ -337,8 +357,9 @@ private fun MarqueeLabel(
             .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
             .drawWithContent {
                 drawContent()
-                if (needsScroll && size.width > 0f) {
-                    val fade = (edgeFadePx / size.width).coerceIn(0.05f, 0.35f)
+                val isNearEdges = textWidthPx > clearWidth
+                if ((needsScroll || isNearEdges) && size.width > 0f) {
+                    val fade = (edgeFadePx / size.width).coerceIn(0.02f, 0.4f)
                     drawRect(
                         brush = Brush.horizontalGradient(
                             0f to Color.Transparent,
@@ -350,7 +371,6 @@ private fun MarqueeLabel(
                     )
                 }
             },
-        contentAlignment = Alignment.CenterStart,
     ) {
         Text(
             text = text,
@@ -360,7 +380,8 @@ private fun MarqueeLabel(
             onTextLayout = { textWidthPx = it.size.width.toFloat() },
             modifier = Modifier
                 .wrapContentWidth(unbounded = true)
-                .graphicsLayer { translationX = baseTranslationX },
+                .align(Alignment.CenterStart)
+                .offset { IntOffset(scrollX.roundToInt(), 0) },
             style = TextStyle(
                 color = Color.White,
                 fontSize = fontSize,

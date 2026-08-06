@@ -43,13 +43,17 @@ class SettingsRepository(private val context: Context) {
         val hideDrawerButton = booleanPreferencesKey("hide_drawer_button")
         val swipeSensitivity = floatPreferencesKey("swipe_sensitivity")
         val showClock = booleanPreferencesKey("show_clock")
+        val clockSize = floatPreferencesKey("clock_size_sp")
         val showEqButton = booleanPreferencesKey("show_eq_button")
         val eqAppComponent = stringPreferencesKey("eq_app_component")
+        val eqAppSeeded = booleanPreferencesKey("eq_app_seeded")
         val showSkipButtons = booleanPreferencesKey("show_skip_buttons")
+        val chromeControlSize = floatPreferencesKey("chrome_control_size_dp")
         val drawerBackgroundOpacity = floatPreferencesKey("drawer_bg_opacity")
         val progressBarThickness = floatPreferencesKey("progress_bar_thickness")
         val showBatteryBar = booleanPreferencesKey("show_battery_bar")
         val showTrackInfo = booleanPreferencesKey("show_track_info")
+        val marqueeSpeed = floatPreferencesKey("marquee_speed")
     }
 
     val settings: Flow<LauncherSettings> = context.dataStore.data.map { prefs ->
@@ -60,7 +64,7 @@ class SettingsRepository(private val context: Context) {
             drawerIconSizeDp = prefs[Keys.drawerIconSize] ?: 48f,
             drawerColumns = prefs[Keys.drawerColumns] ?: 4,
             drawerShowSearch = prefs[Keys.drawerShowSearch] ?: true,
-            showStatusBar = prefs[Keys.showStatusBar] ?: true,
+            showStatusBar = prefs[Keys.showStatusBar] ?: false,
             statusBarScrimOpacity = prefs[Keys.statusBarScrim] ?: 0.4f,
             defaultWallpaperUri = prefs[Keys.wallpaperUri],
             iconPackPackage = prefs[Keys.iconPack],
@@ -69,19 +73,22 @@ class SettingsRepository(private val context: Context) {
             dockSeeded = prefs[Keys.dockSeeded] ?: false,
             onboardingHomeDone = prefs[Keys.onboardingHome] ?: false,
             onboardingMediaDone = prefs[Keys.onboardingMedia] ?: false,
-            nowPlayingSizeDp = prefs[Keys.nowPlayingSize] ?: 120f,
+            nowPlayingSizeDp = prefs[Keys.nowPlayingSize] ?: 200f,
             dockRingRadiusFraction = prefs[Keys.dockRingRadius] ?: 0.78f,
-            swipeUpToOpenDrawer = prefs[Keys.swipeUpToOpenDrawer] ?: false,
+            swipeUpToOpenDrawer = prefs[Keys.swipeUpToOpenDrawer] ?: true,
             hideDrawerButton = prefs[Keys.hideDrawerButton] ?: false,
-            swipeSensitivity = (prefs[Keys.swipeSensitivity] ?: 1f).coerceIn(0.25f, 2f),
+            swipeSensitivity = (prefs[Keys.swipeSensitivity] ?: 2f).coerceIn(0.25f, 3f),
             showClock = prefs[Keys.showClock] ?: true,
-            showEqButton = prefs[Keys.showEqButton] ?: false,
+            clockSizeSp = (prefs[Keys.clockSize] ?: 22f).coerceIn(14f, 48f),
+            showEqButton = prefs[Keys.showEqButton] ?: true,
             eqAppComponent = prefs[Keys.eqAppComponent],
             showSkipButtons = prefs[Keys.showSkipButtons] ?: false,
+            chromeControlSizeDp = (prefs[Keys.chromeControlSize] ?: 26f).coerceIn(18f, 48f),
             drawerBackgroundOpacity = (prefs[Keys.drawerBackgroundOpacity] ?: 0.45f).coerceIn(0f, 1f),
             progressBarThicknessDp = (prefs[Keys.progressBarThickness] ?: 4f).coerceIn(2f, 14f),
             showBatteryBar = prefs[Keys.showBatteryBar] ?: true,
             showTrackInfo = prefs[Keys.showTrackInfo] ?: true,
+            marqueeSpeed = (prefs[Keys.marqueeSpeed] ?: 0.5f).coerceIn(0.25f, 1f),
         )
     }
 
@@ -160,14 +167,37 @@ class SettingsRepository(private val context: Context) {
         it[Keys.hideDrawerButton] = value
     }
     suspend fun setSwipeSensitivity(value: Float) = edit {
-        it[Keys.swipeSensitivity] = value.coerceIn(0.25f, 2f)
+        it[Keys.swipeSensitivity] = value.coerceIn(0.25f, 3f)
     }
     suspend fun setShowClock(value: Boolean) = edit { it[Keys.showClock] = value }
+    suspend fun setClockSizeSp(value: Float) = edit {
+        it[Keys.clockSize] = value.coerceIn(14f, 48f)
+    }
     suspend fun setShowEqButton(value: Boolean) = edit { it[Keys.showEqButton] = value }
     suspend fun setEqAppComponent(value: String?) = edit {
         if (value.isNullOrBlank()) it.remove(Keys.eqAppComponent) else it[Keys.eqAppComponent] = value
     }
+
+    /**
+     * One-shot: prefer Wavelet, then Poweramp Equalizer, when no EQ target has been chosen yet.
+     * [resolvePreferredEqComponent] should return a flattened ComponentName string or null.
+     */
+    suspend fun seedEqAppIfNeeded(resolvePreferredEqComponent: () -> String?) {
+        val prefs = context.dataStore.data.first()
+        if (prefs[Keys.eqAppSeeded] == true) return
+        val preferred = if (prefs[Keys.eqAppComponent] == null) resolvePreferredEqComponent() else null
+        edit {
+            it[Keys.eqAppSeeded] = true
+            if (preferred != null && it[Keys.eqAppComponent] == null) {
+                it[Keys.eqAppComponent] = preferred
+            }
+        }
+    }
+
     suspend fun setShowSkipButtons(value: Boolean) = edit { it[Keys.showSkipButtons] = value }
+    suspend fun setChromeControlSizeDp(value: Float) = edit {
+        it[Keys.chromeControlSize] = value.coerceIn(18f, 48f)
+    }
     suspend fun setDrawerBackgroundOpacity(value: Float) = edit {
         it[Keys.drawerBackgroundOpacity] = value.coerceIn(0f, 1f)
     }
@@ -176,6 +206,9 @@ class SettingsRepository(private val context: Context) {
     }
     suspend fun setShowBatteryBar(value: Boolean) = edit { it[Keys.showBatteryBar] = value }
     suspend fun setShowTrackInfo(value: Boolean) = edit { it[Keys.showTrackInfo] = value }
+    suspend fun setMarqueeSpeed(value: Float) = edit {
+        it[Keys.marqueeSpeed] = value.coerceIn(0.25f, 1f)
+    }
 
     private suspend fun edit(block: suspend (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         context.dataStore.edit(block)

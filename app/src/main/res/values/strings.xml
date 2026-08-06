@@ -53,6 +53,7 @@
     <string name="about_version">Version</string>
     <string name="about_donation">Support Wheelie</string>
     <string name="about_donation_subtitle">Donation link coming soon</string>
+    <string name="about_privacy_policy">Privacy policy</string>
     <string name="progress_bar_thickness">Progress bar thickness</string>
     <string name="show_battery_bar">Show battery bar</string>
     <string name="show_track_info">Show track info</string>

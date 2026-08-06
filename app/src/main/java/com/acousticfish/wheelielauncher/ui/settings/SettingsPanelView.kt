@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.provider.Settings
 import android.util.AttributeSet
 import android.util.TypedValue
@@ -434,6 +435,14 @@ class SettingsPanelView @JvmOverloads constructor(
         navRow(context.getString(R.string.app_name), context.getString(R.string.app_name), onClick = {})
         navRow(context.getString(R.string.about_version), appVersionName(), onClick = {})
         navRow(context.getString(R.string.about_author), context.getString(R.string.about_author_name), onClick = {})
+        navRow(context.getString(R.string.about_privacy_policy), null) {
+            context.startActivity(
+                Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse("https://github.com/chaples55/WheelieLauncher/blob/main/PRIVACY.md"),
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
         navRow(
             context.getString(R.string.about_donation),
             context.getString(R.string.about_donation_subtitle),
